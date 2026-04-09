@@ -1,0 +1,1600 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>SuckPasswords</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234a6cf7'/%3E%3Crect x='19' y='29' width='26' height='20' rx='5' fill='white'/%3E%3Cpath d='M23 29v-7a9 9 0 0 1 18 0v7' stroke='white' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='38' r='3.5' fill='%234a6cf7'/%3E%3C/svg%3E"/>
+  <style>
+    :root {
+      --bg:       #0b0d11;
+      --sidebar:  #12141c;
+      --card:     #181b24;
+      --card2:    #1c1f2b;
+      --ink:      #dde3ee;
+      --muted:    #5c6b84;
+      --accent:   #4b9eff;
+      --green:    #3ecf8e;
+      --green2:   #2a9d6f;
+      --danger:   #f87171;
+      --dng-bg:   #2c1618;
+      --line:     #1e2538;
+      --sel-bg:   #142238;
+      --sel-text: #5aabff;
+      --shadow:   0 8px 24px rgba(0,0,0,.55);
+      --shadow-sm:0 2px 8px rgba(0,0,0,.4);
+    }
+    [data-theme="light"] {
+      --bg:       #f0f2f7;
+      --sidebar:  #ffffff;
+      --card:     #ffffff;
+      --card2:    #f4f6fb;
+      --ink:      #1a1f2e;
+      --muted:    #7b8499;
+      --accent:   #3b82f6;
+      --green:    #16a34a;
+      --green2:   #15803d;
+      --danger:   #dc2626;
+      --dng-bg:   #fef2f2;
+      --line:     #e2e6f0;
+      --sel-bg:   #dbeafe;
+      --sel-text: #1d4ed8;
+      --shadow:   0 8px 24px rgba(0,0,0,.12);
+      --shadow-sm:0 2px 8px rgba(0,0,0,.08);
+    }
+    [data-theme="light"] body { background: var(--bg); color: var(--ink); }
+    [data-theme="light"] .sidebar-nav-item:hover { background: #f0f4ff; color: var(--ink); }
+    [data-theme="light"] .folder-row:hover { background: #f0f4ff; }
+    [data-theme="light"] .field { background: #f8f9fd; }
+    [data-theme="light"] .search-box input { background: #f4f6fb; }
+    [data-theme="light"] tbody tr:hover { background: #f4f6fb; }
+    [data-theme="light"] .admin-table tbody tr:hover { background: #f4f6fb; }
+    [data-theme="light"] .btn-secondary { background: #f0f2f7; color: var(--ink); }
+    [data-theme="light"] .btn-secondary:hover { background: #e4e8f4; filter: none; }
+    [data-theme="light"] .btn-ghost:hover { background: #e8ecf8; color: var(--ink); filter: none; }
+    [data-theme="light"] .btn-icon:hover { background: #e8ecf8; color: var(--ink); }
+    [data-theme="light"] .topbar-control { background: #f7f9fe; color: var(--ink); }
+    [data-theme="light"] .topbar-control:hover { background: #edf2ff; border-color: #cfd8ef; }
+    [data-theme="light"] .topbar-control .ico { color: #4b5568; }
+    [data-theme="light"] .checkbox-row { background: #f4f6fb; }
+    [data-theme="light"] .icon-picker-grid { background: #f4f6fb; }
+    [data-theme="light"] .type-tab { background: #f4f6fb; }
+    [data-theme="light"] .type-tab.active { background: #dbeafe; }
+    [data-theme="light"] .type-badge { background: #eef4ff; color: #4f79b8; border-color: #d6e4fb; }
+    [data-theme="light"] .type-badge.ssh { background: #edf6ff; color: #5b83bb; border-color: #d7e8fb; }
+    [data-theme="light"] .type-badge.api { background: #f3efff; color: #7f68b3; border-color: #e2daf8; }
+    [data-theme="light"] .modal-backdrop { background: rgba(0,0,0,.35); }
+    [data-theme="light"] .logout-btn:hover { background: #fef2f2; color: var(--danger); border-color: #fca5a5; }
+    [data-theme="light"] .badge.no { background: #f0f2f7; color: var(--muted); }
+    [data-theme="light"] .badge.yes { background: #dcfce7; color: #166534; }
+    [data-theme="light"] .badge.admin { background: #f3e8ff; color: #7c3aed; }
+    [data-theme="light"] .f-count { background: #f0f2f7; }
+    [data-theme="light"] #suckToast { background: #fff0f2; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    body{font-family:"Segoe UI","Trebuchet MS",system-ui,sans-serif;font-size:14px;
+      color:var(--ink);background:var(--bg);overflow:hidden}
+
+    /* ═══════════════ APP SHELL ═══════════════ */
+    .app{display:flex;height:100vh;width:100vw}
+
+    /* ═══════════════ SIDEBAR ═══════════════ */
+    .sidebar{
+      width:260px;min-width:160px;max-width:480px;flex-shrink:0;
+      background:var(--sidebar);
+      border-right:1px solid var(--line);
+      display:flex;flex-direction:column;
+      overflow:hidden;position:relative;
+    }
+    .sidebar-resizer{
+      position:absolute;right:-3px;top:0;bottom:0;width:6px;
+      cursor:col-resize;z-index:50;
+      transition:background .15s;
+    }
+    .sidebar-resizer:hover,.sidebar-resizer.dragging{
+      background:var(--accent);opacity:.7;
+    }
+    .sidebar-brand{
+      padding:20px 18px 16px;
+      display:flex;align-items:center;gap:10px;
+      border-bottom:1px solid var(--line);
+    }
+    .brand-icon{
+      width:34px;height:34px;border-radius:10px;
+      background:#4a6cf7;
+      display:flex;align-items:center;justify-content:center;
+      flex-shrink:0;
+    }
+    .brand-text{font-size:15px;font-weight:700;line-height:1.1}
+    .brand-sub{font-size:11px;color:var(--muted);margin-top:1px}
+
+    .sidebar-nav{padding:10px 10px 0;display:flex;flex-direction:column;gap:2px}
+    .sidebar-nav-item{
+      display:flex;align-items:center;gap:8px;
+      padding:8px 10px;border-radius:8px;cursor:pointer;
+      font-size:13px;font-weight:500;color:var(--muted);
+      border:none;background:none;width:100%;text-align:left;
+      transition:background .12s,color .12s;
+    }
+    .sidebar-nav-item:hover{background:#1a1e2a;color:var(--ink)}
+    .sidebar-nav-item.active{background:var(--sel-bg);color:var(--sel-text);font-weight:600}
+    .sidebar-nav-item .ni{font-size:15px}
+
+    .sidebar-section-header{
+      padding:16px 18px 6px;
+      font-size:10px;font-weight:700;letter-spacing:.8px;
+      color:var(--muted);text-transform:uppercase;
+      display:flex;align-items:center;justify-content:space-between;
+    }
+
+    .folder-tree{
+      flex:1;overflow-y:auto;overflow-x:hidden;
+      padding:4px 8px 8px;
+      display:flex;flex-direction:column;gap:2px;
+    }
+    .folder-item{
+      border-radius:7px;border:none;background:none;
+      list-style:none;
+    }
+    .folder-row{
+      display:flex;align-items:center;gap:6px;
+      padding:6px 8px;border-radius:7px;cursor:pointer;
+      transition:background .1s,color .1s;
+    }
+    .folder-row:hover{background:#1a1e2a}
+    .folder-row.active{background:var(--sel-bg);color:var(--sel-text)}
+    .folder-row.active .f-icon,.folder-row.active .f-name{color:var(--sel-text)}
+    .folder-row.drop-target{background:#12283f;outline:1px dashed var(--accent)}
+    .folder-row.drag-origin{opacity:.4}
+    .f-icon{font-size:13px;flex-shrink:0;color:var(--muted);cursor:grab}
+    .f-name{flex:1;font-size:13px;font-weight:500;color:var(--ink);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:none}
+    .f-count{font-size:11px;color:var(--muted);background:#1a1e2a;
+      border-radius:99px;padding:1px 6px;flex-shrink:0}
+    .f-actions{display:flex;gap:1px;flex-shrink:0;opacity:0;transition:opacity .12s}
+    .folder-row:hover .f-actions,.folder-row.active .f-actions{opacity:1}
+    .drop-root-zone{
+      display:none;margin:4px 8px;
+      border:1.5px dashed var(--line);border-radius:8px;
+      padding:7px;text-align:center;font-size:11px;color:var(--muted);
+      transition:border-color .12s,color .12s;
+    }
+    .drop-root-zone.visible{display:block}
+    .drop-root-zone.active{border-color:var(--accent);color:var(--accent)}
+
+    .sidebar-footer{
+      padding:12px 14px;border-top:1px solid var(--line);
+      display:flex;align-items:center;gap:10px;
+    }
+    .user-avatar{
+      width:32px;height:32px;border-radius:50%;flex-shrink:0;
+      background:linear-gradient(135deg,#1a6fff,#4b9eff);
+      color:#fff;font-size:13px;font-weight:700;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .user-info{flex:1;min-width:0}
+    .user-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .user-role{font-size:11px;color:var(--muted)}
+    .logout-btn{
+      background:none;border:1px solid var(--line);border-radius:7px;
+      color:var(--muted);font-size:12px;padding:4px 8px;cursor:pointer;
+      transition:background .12s,color .12s,border-color .12s;white-space:nowrap;flex-shrink:0;
+    }
+    .logout-btn:hover{background:var(--dng-bg);color:var(--danger);border-color:rgba(248,113,113,.3)}
+
+    /* ═══════════════ MAIN CONTENT ═══════════════ */
+    .main-content{
+      flex:1;min-width:0;
+      display:flex;flex-direction:column;
+      overflow:hidden;background:var(--bg);
+    }
+    .main-header{
+      padding:20px 28px 0;
+      display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+    }
+    .main-title{font-size:22px;font-weight:700;letter-spacing:-.3px}
+    .header-actions{display:flex;gap:8px;align-items:center}
+    .topbar-control{
+      display:inline-flex;align-items:center;gap:10px;
+      height:36px;padding:0 12px;border-radius:10px;
+      border:1px solid var(--line);background:#121a31;color:var(--ink);
+      font-size:13px;font-weight:600;cursor:pointer;
+      transition:background .12s,border-color .12s,transform .1s,color .12s;
+    }
+    .topbar-control:hover{background:#182242;border-color:#283252}
+    .topbar-control:active{transform:scale(.98)}
+    .topbar-control.icon-only{width:36px;padding:0;justify-content:center;gap:0}
+    .topbar-control .ico{font-size:18px;line-height:1;color:#e7eefc}
+    .topbar-control .lbl{line-height:1}
+
+    .main-body{flex:1;overflow-y:auto;padding:16px 28px 24px;display:flex;flex-direction:column;gap:16px}
+
+    /* ═══════════════ STATS ═══════════════ */
+    .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex-shrink:0}
+    .stat-card{
+      background:var(--card);border:1px solid var(--line);border-radius:12px;
+      padding:16px 20px;box-shadow:var(--shadow-sm);
+    }
+    .stat-val{font-size:28px;font-weight:800;color:var(--ink);line-height:1}
+    .stat-lbl{font-size:12px;color:var(--muted);margin-top:4px}
+
+    /* ═══════════════ TABLE ═══════════════ */
+    .entries-section{
+      background:var(--card);border:1px solid var(--line);border-radius:14px;
+      overflow:hidden;box-shadow:var(--shadow-sm);flex:1;display:flex;flex-direction:column;
+    }
+    .entries-header{
+      padding:14px 18px;border-bottom:1px solid var(--line);
+      display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;
+    }
+    .entries-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);display:flex;align-items:center;gap:8px}
+    .entries-title-icon{font-size:16px}
+    .entries-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .entries-actions{display:flex;align-items:center;gap:8px}
+    .search-box{position:relative;flex:0 0 220px}
+    .search-box input{
+      width:100%;background:#13151c;border:1px solid var(--line);border-radius:8px;
+      padding:6px 10px 6px 30px;font-size:12px;color:var(--ink);outline:none;
+      transition:border-color .15s;
+    }
+    .search-box input:focus{border-color:var(--accent)}
+    .search-box .sico{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--muted);pointer-events:none}
+
+    .tbl-wrap{overflow-y:auto;flex:1}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    thead tr{background:var(--card2);position:sticky;top:0;z-index:2}
+    thead th{
+      padding:8px 14px;text-align:left;
+      font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+      color:var(--muted);border-bottom:1px solid var(--line);white-space:nowrap;
+    }
+    tbody tr{border-bottom:1px solid var(--line);transition:background .1s;cursor:default}
+    tbody tr:last-child{border-bottom:none}
+    tbody tr:hover{background:#161925}
+    .td-icon-title{display:flex;align-items:center;gap:8px}
+    .td-ico{font-size:18px;flex-shrink:0;line-height:1}
+    .td-name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+    .td-folder{font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+    td{padding:10px 14px;vertical-align:middle}
+    td.td-pw,td.td-login,td.td-url{font-size:12px;color:var(--muted);white-space:nowrap}
+    .pw-mask{letter-spacing:3px;font-size:11px;user-select:none}
+    .type-badge{
+      display:inline-flex;font-size:10px;font-weight:700;
+      padding:3px 8px;border-radius:99px;
+      background:#131e30;color:#6aa3d5;border:1px solid #1a2e45;
+      white-space:nowrap;
+    }
+    .type-badge.ssh{background:#111c2a;color:#8bbdf0;border-color:#1a2d44}
+    .type-badge.api{background:#1a1030;color:#c07aff;border-color:#2a1650}
+    .td-actions{display:flex;gap:2px;align-items:center;opacity:0;transition:opacity .12s}
+    tr:hover .td-actions{opacity:1}
+    .dash{color:var(--muted)}
+
+    /* ═══════════════ ADMIN TAB ═══════════════ */
+    .admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+    .admin-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:var(--shadow-sm)}
+    .admin-card-title{font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+    .admin-table th,
+    .admin-table td{padding:8px 10px;border-bottom:1px solid var(--line)}
+    .admin-table{background:transparent}
+    .admin-table thead tr{background:var(--card2)}
+    .admin-table tbody tr:hover{background:#161925}
+    .badge{font-size:11px;padding:2px 8px;border-radius:99px;font-weight:700}
+    .badge.yes{background:#0e2519;color:var(--green)} .badge.no{background:#1a1e2a;color:var(--muted)}
+    .badge.admin{background:#2a1830;color:#d47fff}
+    .perm-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+    .checkbox-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#1a1e2a;border-radius:8px}
+    .checkbox-row input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:var(--green)}
+    .checkbox-row label{margin:0;color:var(--ink);font-weight:600;cursor:pointer;font-size:13px}
+
+    /* ═══════════════ LOGIN ═══════════════ */
+    .login-screen{
+      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+      background:var(--bg);z-index:200;padding:24px;
+    }
+    .login-card{
+      width:min(380px,100%);background:var(--card);border:1px solid var(--line);
+      border-radius:20px;padding:36px 32px;box-shadow:var(--shadow);
+    }
+    .login-logo{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+    .login-logo .brand-icon{width:40px;height:40px;font-size:18px;border-radius:12px}
+    .login-logo-text{font-size:20px;font-weight:800}
+    .login-sub{font-size:12px;color:var(--muted);margin-bottom:28px}
+
+    /* ═══════════════ FORMS ═══════════════ */
+    .field{
+      display:block;width:100%;border:1px solid var(--line);border-radius:9px;
+      padding:9px 12px;font-size:13px;background:#13151d;color:var(--ink);
+      outline:none;transition:border-color .15s;
+    }
+    .field:focus{border-color:var(--accent)}
+    label{display:block;font-size:11px;color:var(--muted);margin:10px 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+    .pw-wrap{position:relative}
+    .pw-wrap .field{padding-right:38px}
+    .pw-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);
+      background:none;border:none;cursor:pointer;font-size:14px;color:var(--muted);padding:0;line-height:1}
+
+    /* ═══════════════ BUTTONS ═══════════════ */
+    .btn{
+      display:inline-flex;align-items:center;justify-content:center;gap:5px;
+      border:0;border-radius:8px;padding:8px 14px;
+      font-size:13px;font-weight:600;cursor:pointer;
+      transition:filter .12s,transform .1s;line-height:1;white-space:nowrap;
+    }
+    .btn:hover{filter:brightness(1.1)} .btn:active{transform:scale(.97)}
+    .btn-main{background:linear-gradient(135deg,var(--green2),var(--green));color:#072010;box-shadow:0 3px 12px rgba(62,207,142,.25)}
+    .btn-accent{background:linear-gradient(135deg,#1a6fff,var(--accent));color:#fff;box-shadow:0 3px 12px rgba(75,158,255,.25)}
+    .btn-secondary{background:#1e2231;color:var(--ink);border:1px solid var(--line)}
+    .btn-secondary:hover{background:#252a38;filter:none}
+    .btn-ghost{background:transparent;color:var(--muted);padding:5px 9px;font-size:12px;border-radius:7px}
+    .btn-ghost:hover{background:#1a1e2a;color:var(--ink);filter:none}
+    .btn-danger{background:var(--dng-bg);color:var(--danger);border:1px solid rgba(248,113,113,.2)}
+    .btn-sm{padding:5px 10px;font-size:12px;border-radius:7px}
+    .btn-full{width:100%;padding:11px;font-size:14px}
+    .btn-icon{background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;
+      padding:3px 5px;border-radius:5px;line-height:1;transition:background .1s,color .1s}
+    .btn-icon:hover{background:#1e2231;color:var(--ink)}
+    .btn-icon.red:hover{background:var(--dng-bg);color:var(--danger)}
+    .row{display:flex;gap:8px;align-items:center}
+
+    /* ═══════════════ MESSAGES ═══════════════ */
+    .msg{min-height:16px;margin-top:8px;font-size:12px;color:var(--green)}
+    .msg.error{color:var(--danger)}
+
+    /* ═══════════════ MODALS ═══════════════ */
+    .modal-backdrop{
+      position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+      background:rgba(3,4,8,.8);backdrop-filter:blur(6px);z-index:100;padding:20px;
+    }
+    .modal-backdrop.open{display:flex}
+    .modal{
+      width:min(500px,100%);background:var(--card);border:1px solid var(--line);
+      border-radius:18px;padding:24px;box-shadow:0 24px 64px rgba(0,0,0,.7);
+      animation:mi .18s ease;max-height:94vh;overflow-y:auto;
+    }
+    @keyframes mi{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+    .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+    .modal-head h3{font-size:16px;font-weight:700}
+    .modal-close{background:none;border:none;cursor:pointer;font-size:17px;color:var(--muted);
+      padding:3px 6px;border-radius:6px;line-height:1}
+    .modal-close:hover{background:#1e2231;color:var(--ink)}
+    .danger-box{background:var(--dng-bg);border:1px solid rgba(248,113,113,.2);border-radius:9px;
+      padding:10px 12px;font-size:12px;color:var(--danger);margin-top:10px}
+    .entry-type-tabs{display:flex;gap:6px;margin:8px 0}
+    .type-tab{flex:1;padding:7px;border:1.5px solid var(--line);border-radius:8px;background:var(--card2);
+      cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);text-align:center;transition:all .12s}
+    .type-tab.active{border-color:var(--accent);color:var(--accent);background:#0e1e38}
+    .gen-row{display:flex;gap:6px;align-items:flex-end}
+    .gen-row .field{flex:1}
+    .modal-footer{display:flex;gap:8px;margin-top:18px}
+
+    /* Icon picker */
+    .icon-picker-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:3px;margin-top:6px;
+      background:#0f1118;border:1px solid var(--line);border-radius:9px;
+      padding:7px;max-height:160px;overflow-y:auto}
+    .icon-opt{font-size:19px;text-align:center;padding:5px;border-radius:6px;cursor:pointer;
+      border:1.5px solid transparent;transition:all .1s;user-select:none;line-height:1.2}
+    .icon-opt:hover{background:#1e2231}
+    .icon-opt.selected{border-color:var(--accent);background:#0e1e38}
+    .icon-preview-lbl{font-size:19px;display:inline-block;margin-right:5px;vertical-align:middle}
+
+    /* Empty */
+    .empty-state{text-align:center;padding:48px 16px;color:var(--muted);font-size:13px}
+    .empty-state .big{font-size:36px;margin-bottom:10px}
+
+    .hidden{display:none!important}
+    @media(max-width:780px){.sidebar{width:190px}.stats-row{grid-template-columns:repeat(2,1fr)}.admin-grid{grid-template-columns:1fr}}
+    /* ── Weak-password toast ── */
+    #suckToast{
+      position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(20px);
+      background:#1e2235;border:1px solid #ff4d6d;border-radius:12px;
+      color:#ff4d6d;font-size:15px;font-weight:600;letter-spacing:0.01em;
+      padding:14px 28px;box-shadow:0 8px 32px rgba(0,0,0,0.5);
+      opacity:0;transition:opacity 0.3s ease,transform 0.3s ease;
+      pointer-events:none;z-index:9999;white-space:nowrap;
+    }
+    #suckToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  </style>
+</head>
+<body>
+<div id="suckToast">🤦 Your password completely suck dude</div>
+
+<!-- ═══ LOGIN SCREEN ═══ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="brand-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" style="width:22px;height:22px"><rect x="19" y="29" width="26" height="20" rx="5" fill="white"/><path d="M23 29v-7a9 9 0 0 1 18 0v7" stroke="white" stroke-width="4" fill="none" stroke-linecap="round"/><circle cx="32" cy="38" r="3.5" fill="#4a6cf7"/></svg></div>
+      <span class="login-logo-text">SuckPasswords</span>
+    </div>
+    <p class="login-sub">Corporate password vault</p>
+    <label for="loginUsername">Username</label>
+    <input class="field" id="loginUsername" placeholder="username" autocomplete="username"/>
+    <label for="loginPassword">Password</label>
+    <div class="pw-wrap">
+      <input class="field" id="loginPassword" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
+      <button class="pw-eye" id="loginPwEye" type="button">&#128065;</button>
+    </div>
+    <button class="btn btn-accent btn-full" style="margin-top:20px" id="loginBtn">Sign in</button>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div class="app hidden" id="appShell">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-resizer" id="sidebarResizer"></div>
+    <div class="sidebar-brand">
+      <div class="brand-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" style="width:22px;height:22px"><rect x="19" y="29" width="26" height="20" rx="5" fill="white"/><path d="M23 29v-7a9 9 0 0 1 18 0v7" stroke="white" stroke-width="4" fill="none" stroke-linecap="round"/><circle cx="32" cy="38" r="3.5" fill="#4a6cf7"/></svg></div>
+      <div>
+        <div class="brand-text">SuckPasswords</div>
+        <div class="brand-sub">Password Manager</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="sidebar-nav-item active" id="navVault" onclick="switchTab('vault')">
+        <span class="ni">&#128273;</span> Vault
+      </button>
+      <button class="sidebar-nav-item hidden" id="navAdmin" onclick="switchTab('admin')">
+        <span class="ni">&#9881;&#65039;</span> Admin
+      </button>
+    </nav>
+
+    <div class="sidebar-section-header" id="folderSectionHeader">
+      <span>Folders</span>
+      <button class="btn btn-ghost btn-sm" id="openFolderModalBtn" style="padding:2px 8px;font-size:11px">+ Folder</button>
+    </div>
+
+    <div class="folder-tree" id="folderTree">
+      <div style="padding:8px 10px;font-size:12px;color:var(--muted)">No folders yet</div>
+    </div>
+
+    <div class="drop-root-zone" id="rootDropZone">&#8595; Drop here &#8594; General</div>
+
+    <div class="sidebar-footer">
+      <div class="user-avatar" id="userAvatar"></div>
+      <div class="user-info">
+        <div class="user-name" id="userName"></div>
+        <div class="user-role" id="userRole"></div>
+      </div>
+      <button class="logout-btn" id="logoutBtn">Exit</button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+
+    <!-- VAULT TAB -->
+    <div id="tabVault" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+      <div class="main-header">
+        <h1 class="main-title" id="vaultTitle">Vault</h1>
+        <div class="header-actions">
+          <button class="topbar-control" id="aboutBtn" title="About">
+            <span class="ico">ℹ️</span>
+            <span class="lbl">About</span>
+          </button>
+          <button class="topbar-control icon-only" id="themeToggleBtn" title="Switch theme">
+            <span class="ico">🌙</span>
+          </button>
+        </div>
+      </div>
+      <div class="main-body">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-val" id="statFolders">-</div><div class="stat-lbl">Folders</div></div>
+          <div class="stat-card"><div class="stat-val" id="statEntries">-</div><div class="stat-lbl">Entries</div></div>
+          <div class="stat-card"><div class="stat-val" id="statFiltered">-</div><div class="stat-lbl">Shown</div></div>
+        </div>
+
+        <div class="entries-section">
+          <div class="entries-header">
+            <div class="entries-title" id="entriesSectionTitle">
+              <span class="entries-title-icon">&#128273;</span>
+              <span>ALL ENTRIES</span>
+            </div>
+            <div class="entries-tools">
+              <div class="search-box">
+                <span class="sico">&#128269;</span>
+                <input id="searchInput" placeholder="Search&#8230;" autocomplete="off"/>
+              </div>
+              <div class="entries-actions">
+                <button class="btn btn-secondary" id="refreshEntriesBtn">Refresh</button>
+                <button class="btn btn-accent" id="addEntryBtn">+ New entry</button>
+              </div>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table id="entriesTable">
+              <thead>
+                <tr>
+                  <th style="width:260px">Title</th>
+                  <th style="width:120px">Type</th>
+                  <th style="width:160px">Login</th>
+                  <th style="width:140px">Password</th>
+                  <th>URL</th>
+                  <th style="width:100px"></th>
+                </tr>
+              </thead>
+              <tbody id="entriesTbody">
+                <tr><td colspan="6"><div class="empty-state"><div class="big">&#128477;&#65039;</div>No entries</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN TAB -->
+    <div id="tabAdmin" class="hidden" style="overflow-y:auto;height:100%;display:flex;flex-direction:column">
+      <div class="main-header" style="padding-bottom:0;flex-shrink:0">
+        <h1 class="main-title">Admin</h1>
+      </div>
+      <!-- Admin sub-nav -->
+      <div style="padding:10px 28px 0;flex-shrink:0;border-bottom:1px solid var(--line);display:flex;gap:4px">
+        <button class="sidebar-nav-item active" id="adminNavLdap" onclick="switchAdmin('ldap')" style="width:auto;padding:8px 16px">&#128279; LDAP / AD</button>
+        <button class="sidebar-nav-item" id="adminNavUsers" onclick="switchAdmin('users')" style="width:auto;padding:8px 16px">&#128101; Users</button>
+        <button class="sidebar-nav-item" id="adminNavBackup" onclick="switchAdmin('backup')" style="width:auto;padding:8px 16px">&#128190; Backup</button>
+        <button class="sidebar-nav-item" id="adminNavImport" onclick="switchAdmin('import')" style="width:auto;padding:8px 16px">&#128257; Import / Export</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:20px 28px 28px">
+
+        <!-- ── LDAP TAB ── -->
+        <div id="adminTabLdap">
+          <div class="admin-card">
+            <div class="admin-card-title" style="justify-content:space-between">
+              <span>&#128279; LDAP / Active Directory</span>
+              <div class="checkbox-row" style="background:none;padding:0;gap:6px">
+                <input type="checkbox" id="ldapEnabled" style="width:16px;height:16px;accent-color:var(--green)"/>
+                <label for="ldapEnabled" style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink)">Enabled</label>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
+              <div>
+                <label for="ldapServerUrl">Server URL</label>
+                <input class="field" id="ldapServerUrl" placeholder="ldap://dc.company.com:389"/>
+                <label for="ldapBindDn">Bind DN (service account)</label>
+                <input class="field" id="ldapBindDn" placeholder="CN=svc-ldap,OU=ServiceAccounts,DC=company,DC=com"/>
+                <label for="ldapBindPassword">Bind password</label>
+                <div class="pw-wrap">
+                  <input class="field" id="ldapBindPassword" type="password" placeholder="&#8226;&#8226;&#8226; leave empty to keep current &#8226;&#8226;&#8226;"/>
+                  <button class="pw-eye" type="button" onclick="const f=document.getElementById('ldapBindPassword');f.type=f.type==='password'?'text':'password'">&#128065;</button>
+                </div>
+                <label for="ldapBaseDn">Base DN</label>
+                <input class="field" id="ldapBaseDn" placeholder="DC=company,DC=com"/>
+                <label for="ldapRequiredGroup">Required group DN <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+                <input class="field" id="ldapRequiredGroup" placeholder="CN=VaultUsers,OU=Groups,DC=company,DC=com"/>
+              </div>
+              <div>
+                <label for="ldapUserFilter">User search filter</label>
+                <input class="field" id="ldapUserFilter" placeholder="(sAMAccountName={username})"/>
+                <label for="ldapUsernameAttr">Username attribute</label>
+                <input class="field" id="ldapUsernameAttr" placeholder="sAMAccountName"/>
+                <label for="ldapEmailAttr">Email attribute</label>
+                <input class="field" id="ldapEmailAttr" placeholder="mail"/>
+                <label for="ldapDefaultRole">Default role for new users <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+                <input class="field" id="ldapDefaultRole" placeholder="viewer"/>
+                <div style="display:flex;gap:6px;margin-top:12px">
+                  <div class="checkbox-row" style="flex:1"><input type="checkbox" id="ldapUseSsl"/><label for="ldapUseSsl">Use SSL/TLS (LDAPS)</label></div>
+                  <div class="checkbox-row" style="flex:1"><input type="checkbox" id="ldapAutoProvision" checked/><label for="ldapAutoProvision">Auto-provision users</label></div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+              <button class="btn btn-main" id="saveLdapBtn">&#128190; Save</button>
+              <button class="btn btn-secondary" id="testLdapBtn">&#128268; Test connection</button>
+              <button class="btn btn-secondary" id="syncLdapBtn">&#8635; Sync users from AD</button>
+            </div>
+            <div class="msg" id="ldapMsg"></div>
+          </div>
+        </div>
+
+        <!-- ── ROLES TAB removed (roles are hardcoded) ── -->
+        <div id="adminTabRoles" class="hidden" style="display:none!important">
+          <div class="admin-grid">
+            <div class="admin-card">
+              <div class="admin-card-title">&#128221; Create role</div>
+              <label for="roleNameInput">Role name</label>
+              <input class="field" id="roleNameInput" placeholder="viewer"/>
+              <label for="roleDescInput">Description</label>
+              <input class="field" id="roleDescInput" placeholder="Read-only access"/>
+              <button class="btn btn-main" style="margin-top:12px" id="createRoleBtn">Create</button>
+              <div class="msg" id="createRoleMsg"></div>
+            </div>
+            <div class="admin-card">
+              <div class="admin-card-title">&#128274; Set permissions</div>
+              <label for="permRoleSelect">Role</label>
+              <select class="field" id="permRoleSelect"></select>
+              <label for="permTypeSelect">Entry type</label>
+              <select class="field" id="permTypeSelect"></select>
+              <div class="perm-row">
+                <div class="checkbox-row"><input type="checkbox" id="permCanRead"/><label for="permCanRead">can_read</label></div>
+                <div class="checkbox-row"><input type="checkbox" id="permCanWrite"/><label for="permCanWrite">can_write</label></div>
+              </div>
+              <button class="btn btn-main" style="margin-top:12px" id="savePermBtn">Save</button>
+              <div class="msg" id="savePermMsg"></div>
+            </div>
+            <div class="admin-card" style="grid-column:1/-1">
+              <div class="admin-card-title" style="justify-content:space-between">
+                <span>&#127991;&#65039; Roles</span>
+                <button class="btn btn-ghost btn-sm" id="refreshRolesBtn">Refresh</button>
+              </div>
+              <div class="tbl-wrap" style="max-height:320px">
+                <table class="admin-table">
+                  <thead><tr><th>Name</th><th>Description</th></tr></thead>
+                  <tbody id="rolesTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── USERS TAB ── -->
+        <div id="adminTabUsers" class="hidden">
+          <div class="admin-card">
+            <div class="admin-card-title" style="justify-content:space-between">
+              <span>&#128101; Users</span>
+              <button class="btn btn-ghost btn-sm" id="refreshUsersBtn">Refresh</button>
+            </div>
+            <div class="tbl-wrap">
+              <table class="admin-table">
+                <thead><tr><th>Username</th><th>Source</th><th>Admin</th><th>Active</th><th>Roles</th><th></th></tr></thead>
+                <tbody id="usersTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── BACKUP TAB ── -->
+        <div id="adminTabBackup" class="hidden">
+          <div class="admin-grid" style="grid-template-columns:1fr 1fr">
+            <div class="admin-card">
+              <div class="admin-card-title">&#128190; Create backup</div>
+              <p style="font-size:12px;color:var(--muted);margin:0 0 12px">All entries are exported, encrypted with AES-256-GCM and saved as a <code>.spbackup</code> file.</p>
+              <label for="backupPassword">Encryption password</label>
+              <div class="pw-wrap">
+                <input class="field" id="backupPassword" type="password" placeholder="Strong backup password"/>
+                <button class="pw-eye" type="button" onclick="const f=document.getElementById('backupPassword');f.type=f.type==='password'?'text':'password'">&#128065;</button>
+              </div>
+              <button class="btn btn-main" style="margin-top:12px" id="createBackupBtn">&#128190; Download backup</button>
+              <div class="msg" id="backupMsg"></div>
+            </div>
+            <div class="admin-card">
+              <div class="admin-card-title">&#128268; Restore from backup</div>
+              <p style="font-size:12px;color:var(--muted);margin:0 0 12px">This will <strong style="color:#ff4d6d">delete all existing entries</strong> and replace them with the backup contents.</p>
+              <label for="restoreFile">Backup file (.spbackup)</label>
+              <input class="field" id="restoreFile" type="file" accept=".spbackup" style="cursor:pointer"/>
+              <label for="restorePassword">Decryption password</label>
+              <div class="pw-wrap">
+                <input class="field" id="restorePassword" type="password" placeholder="Password used when creating backup"/>
+                <button class="pw-eye" type="button" onclick="const f=document.getElementById('restorePassword');f.type=f.type==='password'?'text':'password'">&#128065;</button>
+              </div>
+              <button class="btn btn-danger" style="margin-top:12px" id="restoreBackupBtn">&#128268; Restore (overwrite all)</button>
+              <div class="msg" id="restoreMsg"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── IMPORT/EXPORT TAB ── -->
+        <div id="adminTabImport" class="hidden">
+          <div class="admin-grid" style="grid-template-columns:1fr 1fr">
+            <div class="admin-card">
+              <div class="admin-card-title">&#128229; Import template</div>
+              <p style="font-size:12px;color:var(--muted);margin:0 0 16px">Download a CSV template with the correct column headers and an example row. Fill it in and use <strong>Import CSV</strong> to load entries.</p>
+              <p style="font-size:11px;color:var(--muted);margin:0 0 16px">Columns: <code>title, login, password, url, description, icon, level, entry_type_code, folder_name</code></p>
+              <button class="btn btn-main" id="exportCsvBtn">&#128229; Download template</button>
+              <div class="msg" id="exportMsg"></div>
+            </div>
+            <div class="admin-card">
+              <div class="admin-card-title">&#128228; Import CSV</div>
+              <p style="font-size:12px;color:var(--muted);margin:0 0 12px">Import entries from CSV. Existing entries are kept — duplicates are added. Required columns: <code>title</code>, <code>password</code>.</p>
+              <label for="importCsvFile">CSV file</label>
+              <input class="field" id="importCsvFile" type="file" accept=".csv,text/csv" style="cursor:pointer"/>
+              <button class="btn btn-main" style="margin-top:12px" id="importCsvBtn">&#128228; Import</button>
+              <div class="msg" id="importMsg"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ FOLDER MODALS ═══ -->
+<div class="modal-backdrop" id="createFolderModal">
+  <div class="modal">
+    <div class="modal-head"><h3>&#128193; Create folder</h3><button class="modal-close" id="closeCreateFolderModalBtn">&#10005;</button></div>
+    <label for="createFolderName">Name</label>
+    <input id="createFolderName" class="field" placeholder="Production"/>
+    <label for="createFolderParent">Parent folder</label>
+    <select id="createFolderParent" class="field"></select>
+    <button class="btn btn-main btn-full" style="margin-top:16px" id="saveCreateFolderBtn">Create</button>
+    <div class="msg" id="createFolderMsg"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="renameFolderModal">
+  <div class="modal">
+    <div class="modal-head"><h3>&#9999;&#65039; Rename folder</h3><button class="modal-close" id="closeRenameFolderModalBtn">&#10005;</button></div>
+    <label for="renameFolderName">New name</label>
+    <input id="renameFolderName" class="field" placeholder="New name"/>
+    <button class="btn btn-main btn-full" style="margin-top:16px" id="saveRenameFolderBtn">Save</button>
+    <div class="msg" id="renameFolderMsg"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="moveFolderModal">
+  <div class="modal">
+    <div class="modal-head"><h3>&#128230; Move folder</h3><button class="modal-close" id="closeMoveFolderModalBtn">&#10005;</button></div>
+    <label for="moveFolderParent">New parent</label>
+    <select id="moveFolderParent" class="field"></select>
+    <button class="btn btn-main btn-full" style="margin-top:16px" id="saveMoveFolderBtn">Move</button>
+    <div class="msg" id="moveFolderMsg"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="deleteFolderModal">
+  <div class="modal">
+    <div class="modal-head"><h3>&#128465;&#65039; Delete folder</h3><button class="modal-close" id="closeDeleteFolderModalBtn">&#10005;</button></div>
+    <p style="color:var(--muted);margin-bottom:12px;font-size:13px" id="deleteFolderTarget"></p>
+    <label for="deleteFolderStrategy">What to do with sub-folders?</label>
+    <select id="deleteFolderStrategy" class="field">
+      <option value="move_children_to_root">Move children to root</option>
+      <option value="delete_recursive">Delete entire tree recursively</option>
+    </select>
+    <div class="danger-box">&#9888;&#65039; Entries inside deleted folders will be moved to "No folder".</div>
+    <button class="btn btn-danger btn-full" style="margin-top:14px" id="confirmDeleteFolderBtn">Delete</button>
+    <div class="msg" id="deleteFolderMsg"></div>
+  </div>
+</div>
+
+<!-- ═══ ENTRY MODAL (Create + Edit) ═══ -->
+<div class="modal-backdrop" id="entryModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="entryModalTitle">&#128273; New entry</h3>
+      <button class="modal-close" id="closeEntryModalBtn">&#10005;</button>
+    </div>
+
+    <label>Entry type</label>
+    <div class="entry-type-tabs" id="entryTypeTabs">
+      <div class="type-tab active" data-type="password">&#128273; Password</div>
+      <div class="type-tab" data-type="ssh">&#128421; SSH</div>
+      <div class="type-tab" data-type="api">&#128268; API</div>
+    </div>
+    <input type="hidden" id="entryTypeHidden" value="password"/>
+
+    <label>Icon
+      <button type="button" id="entryIconToggleBtn" style="background:none;border:none;cursor:pointer;font-size:22px;padding:0 4px;line-height:1;vertical-align:middle" title="Click to change icon"><span id="entryIconPreview" class="icon-preview-lbl">&#128273;</span></button>
+      <span style="font-size:11px;color:var(--muted)">(click to change)</span>
+    </label>
+    <input type="hidden" id="entryIconHidden" value="&#128273;"/>
+    <div class="icon-picker-grid hidden" id="iconPickerGrid"></div>
+
+    <label for="entryTitle">Title *</label>
+    <input class="field" id="entryTitle" placeholder="GitHub - admin"/>
+
+    <label for="entryFolder">Folder</label>
+    <select class="field" id="entryFolder"></select>
+
+    <label for="entryLevel" id="entryLevelLabel">Access level</label>
+    <select class="field" id="entryLevel"></select>
+
+    <label for="entryLogin">Login</label>
+    <input class="field" id="entryLogin" placeholder="username"/>
+
+    <label>Password *</label>
+    <div class="gen-row">
+      <div class="pw-wrap" style="flex:1">
+        <input class="field" id="entryPassword" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"/>
+        <button class="pw-eye" id="entryPwEye" type="button">&#128065;</button>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="genPasswordBtn">Generate</button>
+    </div>
+
+    <label for="entryUrl">URL</label>
+    <input class="field" id="entryUrl" placeholder="https://..."/>
+
+    <label for="entryDesc">Description</label>
+    <textarea class="field" id="entryDesc" rows="2" placeholder="Notes"></textarea>
+
+    <div class="modal-footer">
+      <button class="btn btn-main" style="flex:1" id="saveEntryBtn">Create</button>
+      <button class="btn btn-danger hidden" id="deleteEntryBtn">&#128465;&#65039; Delete</button>
+    </div>
+    <div style="text-align:right;font-size:11px;color:var(--muted);margin-top:6px;min-height:16px" id="entryCreatedBy"></div>
+    <div class="msg" id="entryModalMsg"></div>
+  </div>
+</div>
+
+<!-- ═══ ABOUT MODAL ═══ -->
+<div class="modal-backdrop" id="aboutModal">
+  <div class="modal" style="width:min(440px,100%);text-align:center">
+    <div class="modal-head" style="justify-content:flex-end;margin-bottom:0">
+      <button class="modal-close" id="closeAboutModalBtn">&#10005;</button>
+    </div>
+    <div style="padding:8px 0 24px">
+      <div style="display:flex;justify-content:center;margin-bottom:16px">
+        <div style="width:72px;height:72px;border-radius:20px;background:#4a6cf7;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(74,108,247,.4)">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" style="width:42px;height:42px">
+            <rect x="14" y="26" width="36" height="28" rx="7" fill="white"/>
+            <path d="M20 26v-9a12 12 0 0 1 24 0v9" stroke="white" stroke-width="5" fill="none" stroke-linecap="round"/>
+            <circle cx="32" cy="40" r="5" fill="#4a6cf7"/>
+          </svg>
+        </div>
+      </div>
+      <div style="font-size:24px;font-weight:800;letter-spacing:-.3px;margin-bottom:4px">SuckPasswords</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:24px;letter-spacing:.3px">Corporate Password Vault</div>
+      <div style="background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:16px 20px;text-align:left;font-size:13px;line-height:1.7;color:var(--ink)">
+        This app was built on the fly to store your <em style="color:var(--accent)">suck passwords</em> for the whole team of amateurs.<br>
+        Because apparently, sticky notes and Excel sheets weren't cutting it anymore.
+      </div>
+      <div style="margin-top:20px;display:flex;flex-direction:column;gap:4px">
+        <div style="font-size:13px;color:var(--muted)">Made with ☕ and sarcasm by</div>
+        <div style="font-size:16px;font-weight:700">Andrei Aleschenkow</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">© 2026 &nbsp;·&nbsp; All rights reserved, probably</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const state = {
+  token: localStorage.getItem('sp_token') || '',
+  user: null, folders: [], entries: [], roles: [], users: [],
+  selectedFolderId: null, draggingFolderId: null, editingEntryId: null,
+};
+
+// ── Icons ─────────────────────────────────────────────────────────
+const ICONS = [
+  '🔑','🔐','🔒','🛡️','🗝️',
+  '🐙','🦊','🐳','⚙️','🖥️','💻','🖨️','📡','🔌','🧩','⚡','🛠️',
+  '☁️','🌐','🔗','📶','🌍','🏗️',
+  '📧','📨','💬','📞','📟',
+  '🏦','💳','💰','🪙',
+  '🐦','💼','📘','📸','🎵','🎮','📺','🛒','📱','🎯',
+  '🗄️','📦','📁','📂','🗃️','📋','📊','🔍',
+  '🕵️','🔬','🧪','🚀','🌙','⭐',
+];
+function buildIconPicker() {
+  const g=$('iconPickerGrid'); g.innerHTML='';
+  ICONS.forEach(ic=>{ const d=document.createElement('div'); d.className='icon-opt'; d.textContent=ic; d.addEventListener('click',()=>{ selectIcon(ic); $('iconPickerGrid').classList.add('hidden'); }); g.appendChild(d); });
+}
+function selectIcon(ic) {
+  $('entryIconHidden').value=ic; $('entryIconPreview').textContent=ic;
+  $('iconPickerGrid').querySelectorAll('.icon-opt').forEach(x=>x.classList.toggle('selected',x.textContent===ic));
+}
+
+// ── Utils ─────────────────────────────────────────────────────────
+function setMsg(id,t,e=false){ const n=$(id); n.textContent=t||''; n.classList.toggle('error',!!e); }
+const openModal  = id => $(id).classList.add('open');
+const closeModal = id => $(id).classList.remove('open');
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function switchTab(tab) {
+  $('tabVault').style.display = tab==='vault' ? 'flex' : 'none';
+  $('tabAdmin').classList.toggle('hidden', tab!=='admin');
+  $('tabAdmin').style.display = tab==='admin' ? 'flex' : '';
+  $('navVault').classList.toggle('active', tab==='vault');
+  $('navAdmin').classList.toggle('active', tab==='admin');
+  const vaultOnly = tab==='vault';
+  $('folderSectionHeader').classList.toggle('hidden', !vaultOnly);
+  $('folderTree').classList.toggle('hidden', !vaultOnly);
+  $('rootDropZone').style.display = 'none'; // only shown during folder drag
+  if (tab==='admin') { loadAdminData(); loadLdapConfig(); }
+}
+
+function switchAdmin(sub) {
+  ['ldap','users','backup','import'].forEach(s=>{
+    $('adminTab'+s[0].toUpperCase()+s.slice(1)).classList.toggle('hidden', s!==sub);
+    $('adminNav'+s[0].toUpperCase()+s.slice(1)).classList.toggle('active', s===sub);
+  });
+  if (sub==='users') loadAdminUsers();
+}
+
+async function api(path, opts={}) {
+  const h={'Content-Type':'application/json',...(opts.headers||{})};
+  if (state.token) h.Authorization='Bearer '+state.token;
+  const res=await fetch(path,{...opts,headers:h});
+  const data=await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error(data.detail||'Request failed');
+  return data;
+}
+
+// ── DnD ───────────────────────────────────────────────────────────
+function clearDropHL() {
+  document.querySelectorAll('.folder-row.drop-target').forEach(n=>n.classList.remove('drop-target'));
+  $('rootDropZone').classList.remove('active');
+}
+function getDragId(ev) {
+  const n=Number(ev.dataTransfer?.getData('text/plain'));
+  return Number.isFinite(n)&&n>0?n:state.draggingFolderId;
+}
+// Show root-drop zone only when dragging a folder (not an entry)
+const showRoot=v=>{
+  if (!v) { $('rootDropZone').style.display='none'; return; }
+  // Only show if General exists as a target
+  $('rootDropZone').style.display='block';
+  $('rootDropZone').classList.toggle('visible',v);
+};
+
+// ── Stats ─────────────────────────────────────────────────────────
+function visibleEntries() {
+  const q=$('searchInput').value.trim().toLowerCase();
+  let list=state.selectedFolderId==null?state.entries:state.entries.filter(e=>e.folder_id===state.selectedFolderId);
+  if (q) list=list.filter(e=>(e.title+' '+e.login+' '+e.url+' '+e.description).toLowerCase().includes(q));
+  return list;
+}
+function updateStats() {
+  $('statFolders').textContent=state.folders.length;
+  $('statEntries').textContent=state.entries.length;
+  $('statFiltered').textContent=visibleEntries().length;
+}
+
+// ── Selects ───────────────────────────────────────────────────────
+function fillParentSel(id,excl=null) {
+  const s=$(id); s.innerHTML='';
+  // "General" (system folder) acts as root
+  const general=state.folders.find(f=>f.is_system);
+  if (general && general.id!==excl) {
+    s.appendChild(Object.assign(document.createElement('option'),{value:String(general.id),textContent:'📋 '+general.name+' (General)'}));
+  } else {
+    s.appendChild(Object.assign(document.createElement('option'),{value:'',textContent:'-- Root --'}));
+  }
+  // Regular folders
+  const sorted=[...state.folders].filter(f=>!f.is_system).sort((a,b)=>a.name.localeCompare(b.name));
+  for (const f of sorted) {
+    if (f.id===excl) continue;
+    const opt=document.createElement('option'); opt.value=String(f.id);
+    opt.textContent=f.name;
+    s.appendChild(opt);
+  }
+}
+function fillSel(id,items,v,l) {
+  const s=$(id); s.innerHTML='';
+  for (const it of items)
+    s.appendChild(Object.assign(document.createElement('option'),{value:it[v],textContent:it[l]}));
+}
+
+// ── Folder tree ───────────────────────────────────────────────────
+function buildChildMap() {
+  const m=new Map();
+  for (const f of state.folders) {
+    const k=f.parent_id==null?'root':String(f.parent_id);
+    if (!m.has(k)) m.set(k,[]);
+    m.get(k).push(f);
+  }
+  for (const a of m.values()) a.sort((a,b)=>a.name.localeCompare(b.name));
+  return m;
+}
+
+function renderFolderTree() {
+  const root=$('folderTree'); root.innerHTML='';
+  if (!state.folders.length) { root.innerHTML='<div style="padding:8px 10px;font-size:12px;color:var(--muted)">No folders yet</div>'; return; }
+  const cm=buildChildMap();
+  const mkBranch=(pid,depth)=>{
+    const k=pid==null?'root':String(pid);
+    for (const f of (cm.get(k)||[])) {
+      const item=document.createElement('div'); item.className='folder-item';
+      const row=document.createElement('div');
+      row.className='folder-row'+(state.selectedFolderId===f.id?' active':'');
+      row.style.paddingLeft=(8+depth*16)+'px';
+      row.style.cursor='pointer';
+
+      // Full row click — not just name span
+      row.addEventListener('click',ev=>{
+        if (ev.target.closest('button')) return;
+        state.selectedFolderId=f.id; renderFolderTree(); renderEntries();
+      });
+
+      const ico=document.createElement('span'); ico.className='f-icon';
+      ico.textContent=f.is_system?'🏠':(depth===0?'📁':'📂');
+
+      if (!f.is_system) {
+        ico.draggable=true; ico.title='Drag to move';
+        ico.addEventListener('dragstart',ev=>{
+          state.draggingFolderId=f.id; ev.dataTransfer.effectAllowed='move';
+          ev.dataTransfer.setData('text/plain',String(f.id));
+          row.classList.add('drag-origin'); showRoot(true);
+        });
+        ico.addEventListener('dragend',()=>{ state.draggingFolderId=null; row.classList.remove('drag-origin'); showRoot(false); clearDropHL(); });
+      }
+
+      row.addEventListener('dragover',ev=>{
+        const folderFrom=getDragId(ev);
+        const entryId=ev.dataTransfer?.types?.includes('sp-entry-id');
+        if(!folderFrom&&!entryId)return;
+        if(folderFrom===f.id)return;
+        ev.preventDefault(); row.classList.add('drop-target');
+      });
+      row.addEventListener('dragleave',()=>row.classList.remove('drop-target'));
+      row.addEventListener('drop',async ev=>{
+        ev.preventDefault(); row.classList.remove('drop-target'); clearDropHL();
+        const entryIdStr=ev.dataTransfer.getData('sp-entry-id');
+        if(entryIdStr){
+          // Entry drop → move entry to this folder
+          const entryId=Number(entryIdStr);
+          const entry=state.entries.find(e=>e.id===entryId); if(!entry)return;
+          try{
+            await api('/entries/'+entryId,{method:'PUT',body:JSON.stringify({...entry,folder_id:f.id})});
+            await loadEntries();
+          }catch(e){alert(e.message);}
+          return;
+        }
+        const from=getDragId(ev); if(!from||from===f.id)return;
+        try{await moveFolderReq(from,f.id);}catch(e){alert(e.message);}
+      });
+
+      const nm=document.createElement('span'); nm.className='f-name';
+      nm.textContent=f.is_system?'📋 '+f.name:f.name;
+      if (f.is_system) nm.style.fontWeight='700';
+
+      const cnt=state.entries.filter(e=>e.folder_id===f.id).length;
+      const badge=Object.assign(document.createElement('span'),{className:'f-count',textContent:String(cnt)});
+
+      const acts=document.createElement('div'); acts.className='f-actions';
+      if (!f.is_system) {
+        const mk=(title,ic,cls,fn)=>{ const b=document.createElement('button'); b.className='btn-icon'+cls; b.title=title; b.textContent=ic; b.onclick=ev=>{ev.stopPropagation();fn();}; return b; };
+        acts.append(
+          mk('Rename','✏️','',()=>{ state.selectedFolderId=f.id; $('renameFolderName').value=f.name; setMsg('renameFolderMsg',''); openModal('renameFolderModal'); }),
+          mk('Move','📦','',()=>{ state.selectedFolderId=f.id; fillParentSel('moveFolderParent',f.id); setMsg('moveFolderMsg',''); openModal('moveFolderModal'); }),
+          mk('Delete','🗑️',' red',()=>{ state.selectedFolderId=f.id; $('deleteFolderTarget').textContent='Folder: '+f.name; $('deleteFolderStrategy').value='move_children_to_root'; setMsg('deleteFolderMsg',''); openModal('deleteFolderModal'); })
+        );
+      }
+      row.append(ico,nm,badge,acts);
+      item.appendChild(row); root.appendChild(item);
+      mkBranch(f.id,depth+1);
+    }
+  };
+  mkBranch(null,0);
+}
+
+async function moveFolderReq(folderId,parentId) {
+  await api('/folders/'+folderId+'/move',{method:'PATCH',body:JSON.stringify({parent_id:parentId})});
+  state.selectedFolderId=folderId;
+  await loadFolders(); await loadEntries();
+}
+
+// ── Entry table ───────────────────────────────────────────────────
+function renderEntries() {
+  const tbody=$('entriesTbody'); tbody.innerHTML='';
+  const fid=state.selectedFolderId;
+  const fName=fid!=null?(state.folders.find(f=>f.id===fid)||{}).name:null;
+
+  // Section header + vault title
+  if (fName) {
+    $('entriesSectionTitle').innerHTML='<span class="entries-title-icon">📂</span><span>'+esc(fName.toUpperCase())+'</span>';
+    $('vaultTitle').textContent=fName;
+  } else {
+    $('entriesSectionTitle').innerHTML='<span class="entries-title-icon">📂</span><span>Select a folder</span>';
+    $('vaultTitle').textContent='Vault';
+    tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="big">📂</div>Select a folder in the sidebar</div></td></tr>';
+    updateStats(); return;
+  }
+
+  const visible=visibleEntries();
+  updateStats();
+  if (!visible.length) {
+    tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="big">🗄️</div>No entries found</div></td></tr>';
+    return;
+  }
+  const folderById=new Map(state.folders.map(f=>[f.id,f.name]));
+  for (const e of visible) {
+    const tr=document.createElement('tr');
+    const bCls=e.entry_type_code==='ssh'?'type-badge ssh':e.entry_type_code==='api'?'type-badge api':'type-badge';
+    const folderName=e.folder_id?folderById.get(e.folder_id)||'':null;
+    const plain=e.password;
+    let pwState=false;
+
+    tr.innerHTML=
+      '<td><div class="td-icon-title">'
+      +'<span class="td-ico">'+(e.icon||'🔑')+'</span>'
+      +'<div><div class="td-name">'+esc(e.title)+'</div>'
+      +'</div></div></td>'
+      +'<td><span class="'+bCls+'">'+esc(e.entry_type_code)+'</span></td>'
+      +'<td class="td-login">'+(e.login?esc(e.login):'<span class="dash">—</span>')+'</td>'
+      +'<td class="td-pw"><span class="pw-mask" id="pwm_'+e.id+'">&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;</span></td>'
+      +'<td class="td-url">'+(e.url?'<a href="'+esc(e.url)+'" target="_blank" rel="noreferrer" style="color:var(--accent);text-decoration:none">'+esc(e.url)+'</a>':'<span class="dash">—</span>')+'</td>'
+      +'<td><div class="td-actions" id="tda_'+e.id+'"></div></td>';
+
+    tr.setAttribute('draggable','true');
+    tr.addEventListener('dragstart',ev=>{
+      ev.dataTransfer.setData('sp-entry-id',String(e.id));
+      ev.dataTransfer.effectAllowed='move';
+      tr.style.opacity='0.45';
+    });
+    tr.addEventListener('dragend',()=>{ tr.style.opacity=''; clearDropHL(); });
+    tr.addEventListener('dblclick', ev=>{ if (!ev.target.closest('button,a')) openEntryModal(e); });
+    tbody.appendChild(tr);
+
+    // Wire action buttons after DOM insert
+    const acts=$('tda_'+e.id);
+    const mkB=(title,ic,fn)=>{ const b=document.createElement('button'); b.className='btn-icon'; b.title=title; b.textContent=ic; b.addEventListener('click',fn); return b; };
+    if (e.login) acts.append(mkB('Copy login','📋',()=>navigator.clipboard.writeText(e.login)));
+    if (plain) {
+      acts.append(
+        mkB('Show/hide','👁️',()=>{
+          const el=$('pwm_'+e.id);
+          pwState=!pwState;
+          el.textContent=pwState?plain:'•••••••••';
+          el.style.letterSpacing=pwState?'0':'3px';
+        }),
+        mkB('Copy password','🔐',()=>navigator.clipboard.writeText(plain))
+      );
+    }
+    acts.append(mkB('Edit','✏️',()=>openEntryModal(e)));
+  }
+}
+
+// ── Entry modal ───────────────────────────────────────────────────
+function openEntryModal(entry=null) {
+  state.editingEntryId=entry?entry.id:null;
+  $('entryModalTitle').textContent=entry?'✏️ Edit entry':'🔑 New entry';
+  $('saveEntryBtn').textContent=entry?'Save changes':'Create';
+  $('deleteEntryBtn').classList.toggle('hidden',!entry);
+  setMsg('entryModalMsg','');
+  $('iconPickerGrid').classList.add('hidden');
+  document.querySelectorAll('#entryTypeTabs .type-tab').forEach(t=>t.classList.toggle('active',t.dataset.type===(entry?entry.entry_type_code:'password')));
+  $('entryTypeHidden').value=entry?entry.entry_type_code:'password';
+  selectIcon(entry?.icon||'🔑');
+  fillParentSel('entryFolder');
+  if (entry?.folder_id) $('entryFolder').value=String(entry.folder_id);
+  else if (!entry&&state.selectedFolderId) $('entryFolder').value=String(state.selectedFolderId);
+  // Level dropdown — only shown when user has access to more than General
+  const lvls=state.user?.access_levels||['general'];
+  const lvlLabels={general:'🟢 General',domain_admin:'🔵 Domain Admin',enterprise_admin:'🔴 Enterprise Admin'};
+  $('entryLevel').innerHTML=lvls.map(lv=>`<option value="${lv}">${lvlLabels[lv]||lv}</option>`).join('');
+  $('entryLevel').value=entry?.level||'general';
+  const showLvl=lvls.length>1;
+  $('entryLevelLabel').style.display=showLvl?'':'none';
+  $('entryLevel').style.display=showLvl?'':'none';
+  $('entryTitle').value=entry?.title||'';
+  $('entryLogin').value=entry?.login||'';
+  $('entryPassword').value=entry?.password||'';
+  $('entryPassword').type='password';
+  $('entryUrl').value=entry?.url||'';
+  $('entryDesc').value=entry?.description||'';
+  $('entryCreatedBy').textContent=entry?.created_by?'created by: '+entry.created_by:'';
+  openModal('entryModal');
+}
+
+// ── Weak password detector ────────────────────────────────────────
+function isWeakPassword(pw) {
+  if (pw.length < 8) return true;
+  if (/^[0-9]+$/.test(pw)) return true;          // all digits
+  if (/^[a-zA-Z]+$/.test(pw)) return true;       // all letters, no digits/symbols
+  if (!(/[A-Z]/.test(pw))) return true;           // no uppercase
+  if (!(/[0-9]/.test(pw))) return true;           // no digit
+  if (!(/[^a-zA-Z0-9]/.test(pw))) return true;   // no special char
+  return false;
+}
+let _suckTimer = null;
+function showSuckToast() {
+  const t = $('suckToast');
+  t.classList.add('show');
+  if (_suckTimer) clearTimeout(_suckTimer);
+  _suckTimer = setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+async function saveEntry() {
+  const title=$('entryTitle').value.trim(), password=$('entryPassword').value;
+  if (!title){setMsg('entryModalMsg','Enter a title',true);return;}
+  if (!password){setMsg('entryModalMsg','Enter a password',true);return;}
+  if (isWeakPassword(password)) showSuckToast();
+  const folder_id=$('entryFolder').value?Number($('entryFolder').value):null;
+  const level=$('entryLevel').value||'general';
+  const body={title,password,login:$('entryLogin').value,url:$('entryUrl').value,
+    description:$('entryDesc').value,entry_type_code:$('entryTypeHidden').value,
+    folder_id,icon:$('entryIconHidden').value,level};
+  try {
+    if (state.editingEntryId) await api('/entries/'+state.editingEntryId,{method:'PUT',body:JSON.stringify(body)});
+    else await api('/entries',{method:'POST',body:JSON.stringify(body)});
+    closeModal('entryModal'); await loadEntries();
+  } catch(e){setMsg('entryModalMsg',e.message,true);}
+}
+
+async function deleteEntry() {
+  if (!state.editingEntryId||!confirm('Delete this entry?')) return;
+  try{ await api('/entries/'+state.editingEntryId,{method:'DELETE'}); closeModal('entryModal'); await loadEntries(); }
+  catch(e){setMsg('entryModalMsg',e.message,true);}
+}
+
+// ── Admin ─────────────────────────────────────────────────────────
+async function loadLdapConfig() {
+  try {
+    const c = await api('/admin/ldap');
+    $('ldapEnabled').checked      = c.enabled;
+    $('ldapServerUrl').value      = c.server_url;
+    $('ldapUseSsl').checked       = c.use_ssl;
+    $('ldapBindDn').value         = c.bind_dn;
+    $('ldapBindPassword').value   = '';
+    $('ldapBindPassword').placeholder = c.bind_password_set ? '••• password saved — leave blank to keep •••' : '••• enter bind password •••';
+    $('ldapBaseDn').value         = c.base_dn;
+    $('ldapUserFilter').value     = c.user_filter;
+    $('ldapUsernameAttr').value   = c.username_attr;
+    $('ldapEmailAttr').value      = c.email_attr;
+    $('ldapRequiredGroup').value  = c.required_group_dn;
+    $('ldapAutoProvision').checked= c.auto_provision;
+    $('ldapDefaultRole').value    = c.default_role;
+  } catch {}
+}
+
+async function loadAdminRoles() {
+  try {
+    const [roles, types] = await Promise.all([api('/admin/roles'), api('/admin/entry-types')]);
+    state.roles = roles;
+    $('rolesTableBody').innerHTML='';
+    roles.forEach(r=>{const tr=document.createElement('tr');tr.innerHTML='<td>'+esc(r.name)+'</td><td style="color:var(--muted)"><small>'+esc(r.description)+'</small></td>';$('rolesTableBody').append(tr);});
+    // Fill selects
+    const ps=$('permRoleSelect'); ps.innerHTML='';
+    roles.forEach(r=>ps.append(Object.assign(document.createElement('option'),{value:r.name,textContent:r.name})));
+    const ts=$('permTypeSelect'); ts.innerHTML='';
+    types.forEach(t=>ts.append(Object.assign(document.createElement('option'),{value:t.code,textContent:t.title+' ('+t.code+')'})));
+  } catch{}
+}
+
+async function loadAdminUsers() {
+  try {
+    const users = await api('/admin/users');
+    state.users = users;
+    const SYSTEM_ROLES = ['General','DomainAdmin','EnterpriseAdmin'];
+    $('usersTableBody').innerHTML='';
+    users.forEach(u=>{
+      const tr=document.createElement('tr');
+      const roleBadges=u.roles.map(r=>'<span class="badge" style="background:#0e1e38;color:#6aa3d5;margin-right:3px">'+esc(r)+'</span>').join('');
+      // Build assign dropdown from hardcoded system roles only
+      const roleOpts=SYSTEM_ROLES.map(r=>'<option value="'+esc(r)+'">'+esc(r)+'</option>').join('');
+      tr.innerHTML=
+        '<td>'+esc(u.username)+'</td>'
+        +'<td><span class="badge">'+esc(u.source)+'</span></td>'
+        +'<td><span class="badge '+(u.is_superuser?'admin':'no')+'" id="adminBadge_'+u.id+'" style="cursor:pointer" title="Click to toggle admin">&#9881; '+(u.is_superuser?'yes':'no')+'</span></td>'
+        +'<td><span class="badge '+(u.is_active?'yes':'no')+'">'+(u.is_active?'yes':'no')+'</span></td>'
+        +'<td id="roles_'+u.id+'">'+roleBadges+'</td>'
+        +'<td><div style="display:flex;gap:4px;align-items:center">'
+        +'<select class="field" id="assignSel_'+u.id+'" style="padding:4px 6px;font-size:11px;width:110px"><option value="">+ role</option>'+roleOpts+'</select>'
+        +'</div></td>';
+      $('usersTableBody').append(tr);
+      // Wire admin toggle
+      const adminBadge=$('adminBadge_'+u.id);
+      if(adminBadge){
+        adminBadge.addEventListener('click',async()=>{
+          if(!confirm((u.is_superuser?'Remove admin from ':'Make admin: ')+u.username+'?'))return;
+          try{
+            const d=await api('/admin/users/'+u.id+'/toggle-admin',{method:'POST'});
+            u.is_superuser=d.is_superuser;
+            adminBadge.className='badge '+(d.is_superuser?'admin':'no');
+            adminBadge.textContent='⚙ '+(d.is_superuser?'yes':'no');
+          }catch(e){alert(e.message);}
+        });
+      }
+      // Wire assign select change
+      const sel=$('assignSel_'+u.id);
+      sel.addEventListener('change',async()=>{
+        const rn=sel.value; if(!rn)return;
+        try{
+          await api('/admin/roles/assign',{method:'POST',body:JSON.stringify({username:u.username,role_name:rn})});
+          await loadAdminUsers();
+        } catch(e){ alert(e.message); sel.value=''; }
+      });
+      // Wire remove role badges
+      tr.querySelectorAll('.badge[data-role]').forEach(b=>{
+        b.style.cursor='pointer'; b.title='Click to remove';
+        b.addEventListener('click',async()=>{
+          if(!confirm('Remove role "'+b.dataset.role+'" from '+u.username+'?'))return;
+          try{ await api('/admin/roles/unassign',{method:'POST',body:JSON.stringify({username:u.username,role_name:b.dataset.role})}); await loadAdminUsers(); }
+          catch(e){alert(e.message);}
+        });
+      });
+    });
+    // Rebuild role badges with data-role for removal — redo after DOM insert
+    users.forEach(u=>{
+      const cell=$('roles_'+u.id); if(!cell)return;
+      cell.innerHTML='';
+      u.roles.forEach(r=>{
+        const b=document.createElement('span'); b.className='badge';
+        b.style.cssText='background:#0e1e38;color:#6aa3d5;margin-right:3px;cursor:pointer';
+        b.title='Click to remove'; b.textContent=r; b.dataset.role=r;
+        b.addEventListener('click',async()=>{
+          if(!confirm('Remove role "'+r+'" from '+u.username+'?'))return;
+          try{ await api('/admin/roles/unassign',{method:'POST',body:JSON.stringify({username:u.username,role_name:r})}); await loadAdminUsers(); }
+          catch(e){alert(e.message);}
+        });
+        cell.append(b);
+      });
+    });
+  } catch{}
+}
+
+async function loadAdminData() {
+  // Called when admin tab opens — load the currently active sub-tab
+  const active=['ldap','roles','users'].find(s=>!$('adminTab'+s[0].toUpperCase()+s.slice(1)).classList.contains('hidden'));
+  if (active==='roles') await loadAdminRoles();
+  else if (active==='users') await loadAdminUsers();
+  // ldap loaded separately via loadLdapConfig
+}
+
+// ── Load ──────────────────────────────────────────────────────────
+async function loadFolders() {
+  state.folders=await api('/folders');
+  // auto-select General (system) folder first, otherwise first folder
+  if (state.selectedFolderId==null && state.folders.length) {
+    const general=state.folders.find(f=>f.is_system);
+    state.selectedFolderId=(general||state.folders[0]).id;
+  }
+  fillParentSel('createFolderParent'); fillParentSel('entryFolder');
+  renderFolderTree(); updateStats();
+}
+async function loadEntries() { state.entries=await api('/entries'); renderFolderTree(); renderEntries(); }
+
+// ── Auth ──────────────────────────────────────────────────────────
+async function login() {
+  const username=$('loginUsername').value.trim(), password=$('loginPassword').value;
+  if (!username||!password){setMsg('loginMsg','Enter username and password',true);return;}
+  try {
+    const d=await api('/auth/login',{method:'POST',body:JSON.stringify({username,password}),headers:{}});
+    state.token=d.access_token; localStorage.setItem('sp_token',state.token); await bootstrapApp();
+  } catch(e){setMsg('loginMsg',e.message,true);}
+}
+
+async function bootstrapApp() {
+  if (!state.token) return;
+  try {
+    state.user=await api('/users/me');
+    $('loginScreen').classList.add('hidden');
+    $('appShell').classList.remove('hidden');
+    $('userAvatar').textContent=state.user.username[0].toUpperCase();
+    $('userName').textContent=state.user.username;
+    const lvlRoleLabel={general:'General',domain_admin:'Domain Admin',enterprise_admin:'Enterprise Admin'};
+    const topLvl=state.user.access_levels?.slice(-1)[0];
+    $('userRole').textContent=state.user.is_superuser?'Superuser':(topLvl?lvlRoleLabel[topLvl]||topLvl:'No role');
+    if (state.user.is_superuser) $('navAdmin').classList.remove('hidden');
+    initTheme();
+    buildIconPicker();
+    await Promise.all([loadFolders(),loadEntries()]);
+  } catch(e) {
+    localStorage.removeItem('sp_token'); state.token='';
+    $('loginScreen').classList.remove('hidden'); $('appShell').classList.add('hidden');
+    setMsg('loginMsg',e.message,true);
+  }
+}
+
+function logout() {
+  localStorage.removeItem('sp_token');
+  Object.assign(state,{token:'',user:null,folders:[],entries:[],roles:[],users:[],selectedFolderId:null});
+  $('loginScreen').classList.remove('hidden'); $('appShell').classList.add('hidden');
+  $('navAdmin').classList.add('hidden'); $('loginPassword').value=''; setMsg('loginMsg','');
+}
+
+// ── Events ────────────────────────────────────────────────────────
+$('loginBtn').addEventListener('click',login);
+$('loginPassword').addEventListener('keydown',ev=>{if(ev.key==='Enter')login();});
+$('loginPwEye').addEventListener('click',()=>{const f=$('loginPassword');f.type=f.type==='password'?'text':'password';});
+$('logoutBtn').addEventListener('click',logout);
+
+$('openFolderModalBtn').addEventListener('click',()=>{fillParentSel('createFolderParent');$('createFolderName').value='';setMsg('createFolderMsg','');openModal('createFolderModal');});
+$('closeCreateFolderModalBtn').addEventListener('click',()=>closeModal('createFolderModal'));
+$('saveCreateFolderBtn').addEventListener('click',async()=>{
+  const name=$('createFolderName').value.trim(); if(!name){setMsg('createFolderMsg','Enter a name',true);return;}
+  const pid=$('createFolderParent').value?Number($('createFolderParent').value):null;
+  try{await api('/folders',{method:'POST',body:JSON.stringify({name,parent_id:pid})});closeModal('createFolderModal');await loadFolders();}
+  catch(e){setMsg('createFolderMsg',e.message,true);}
+});
+
+$('closeRenameFolderModalBtn').addEventListener('click',()=>closeModal('renameFolderModal'));
+$('saveRenameFolderBtn').addEventListener('click',async()=>{
+  const name=$('renameFolderName').value.trim(); if(!name){setMsg('renameFolderMsg','Enter a name',true);return;}
+  try{await api('/folders/'+state.selectedFolderId+'/rename',{method:'PUT',body:JSON.stringify({name})});closeModal('renameFolderModal');await loadFolders();}
+  catch(e){setMsg('renameFolderMsg',e.message,true);}
+});
+
+$('closeMoveFolderModalBtn').addEventListener('click',()=>closeModal('moveFolderModal'));
+$('saveMoveFolderBtn').addEventListener('click',async()=>{
+  const pid=$('moveFolderParent').value?Number($('moveFolderParent').value):null;
+  try{await moveFolderReq(state.selectedFolderId,pid);closeModal('moveFolderModal');}
+  catch(e){setMsg('moveFolderMsg',e.message,true);}
+});
+
+$('closeDeleteFolderModalBtn').addEventListener('click',()=>closeModal('deleteFolderModal'));
+$('confirmDeleteFolderBtn').addEventListener('click',async()=>{
+  const s=$('deleteFolderStrategy').value;
+  try{await api('/folders/'+state.selectedFolderId,{method:'DELETE',body:JSON.stringify({strategy:s})});
+    state.selectedFolderId=null;closeModal('deleteFolderModal');await loadFolders();await loadEntries();}
+  catch(e){setMsg('deleteFolderMsg',e.message,true);}
+});
+
+$('rootDropZone').addEventListener('dragover',ev=>{const f=getDragId(ev);if(!f)return;ev.preventDefault();$('rootDropZone').classList.add('active');});
+$('rootDropZone').addEventListener('dragleave',()=>$('rootDropZone').classList.remove('active'));
+$('rootDropZone').addEventListener('drop',async ev=>{
+  ev.preventDefault();const f=getDragId(ev);$('rootDropZone').classList.remove('active');showRoot(false);
+  if(!f)return;
+  // Drop onto General (system) folder
+  const general=state.folders.find(fd=>fd.is_system);
+  try{await moveFolderReq(f,general?general.id:null);}catch(e){alert(e.message);}
+});
+
+// ── Modal ESC + backdrop click ─────────────────────────────────────
+document.addEventListener('keydown',ev=>{
+  if(ev.key!=='Escape')return;
+  document.querySelectorAll('.modal-backdrop.open').forEach(m=>m.classList.remove('open'));
+});
+document.querySelectorAll('.modal-backdrop').forEach(backdrop=>{
+  backdrop.addEventListener('mousedown',ev=>{
+    if(ev.target===backdrop) backdrop.classList.remove('open');
+  });
+});
+
+$('addEntryBtn').addEventListener('click',()=>openEntryModal(null));
+$('closeEntryModalBtn').addEventListener('click',()=>closeModal('entryModal'));
+$('saveEntryBtn').addEventListener('click',saveEntry);
+$('deleteEntryBtn').addEventListener('click',deleteEntry);
+$('entryIconToggleBtn').addEventListener('click',()=>$('iconPickerGrid').classList.toggle('hidden'));
+document.querySelectorAll('#entryTypeTabs .type-tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('#entryTypeTabs .type-tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active'); $('entryTypeHidden').value=tab.dataset.type;
+  });
+});
+$('genPasswordBtn').addEventListener('click',async()=>{
+  try{const d=await api('/password/generate?length=24');$('entryPassword').value=d.password;$('entryPassword').type='text';}catch{}
+});
+$('entryPwEye').addEventListener('click',()=>{const f=$('entryPassword');f.type=f.type==='password'?'text':'password';});
+
+$('searchInput').addEventListener('input',()=>renderEntries());
+$('refreshEntriesBtn').addEventListener('click',async()=>{await Promise.all([loadFolders(),loadEntries()]);});
+
+$('createRoleBtn').addEventListener('click',async()=>{
+  const name=$('roleNameInput').value.trim(); if(!name){setMsg('createRoleMsg','Enter role name',true);return;}
+  try{await api('/admin/roles',{method:'POST',body:JSON.stringify({name,description:$('roleDescInput').value})});
+    setMsg('createRoleMsg','Created!');$('roleNameInput').value='';$('roleDescInput').value='';await loadAdminRoles();}
+  catch(e){setMsg('createRoleMsg',e.message,true);}
+});
+$('savePermBtn').addEventListener('click',async()=>{
+  const rn=$('permRoleSelect').value,et=$('permTypeSelect').value;
+  if(!rn){setMsg('savePermMsg','Select a role',true);return;}
+  try{await api('/admin/permissions',{method:'POST',body:JSON.stringify({role_name:rn,entry_type_code:et,can_read:$('permCanRead').checked,can_write:$('permCanWrite').checked})});
+    setMsg('savePermMsg','Saved!');}
+  catch(e){setMsg('savePermMsg',e.message,true);}
+});
+$('refreshUsersBtn').addEventListener('click',loadAdminUsers);
+
+// ── Backup ────────────────────────────────────────────────────────
+$('createBackupBtn').addEventListener('click',async()=>{
+  const pw=$('backupPassword').value;
+  if(!pw){setMsg('backupMsg','Enter a backup password',true);return;}
+  setMsg('backupMsg','Creating backup…');
+  try{
+    const fd=new FormData(); fd.append('password',pw);
+    const res=await fetch('/admin/backup',{method:'POST',headers:{Authorization:'Bearer '+state.token},body:fd});
+    if(!res.ok){const d=await res.json().catch(()=>({}));throw new Error(d.detail||'Backup failed');}
+    const blob=await res.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='suckpasswords.spbackup'; a.click();
+    URL.revokeObjectURL(url);
+    setMsg('backupMsg','Backup downloaded!');
+  }catch(e){setMsg('backupMsg',e.message,true);}
+});
+
+$('restoreBackupBtn').addEventListener('click',async()=>{
+  const file=$('restoreFile').files[0], pw=$('restorePassword').value;
+  if(!file){setMsg('restoreMsg','Select a backup file',true);return;}
+  if(!pw){setMsg('restoreMsg','Enter the decryption password',true);return;}
+  if(!confirm('This will DELETE all existing entries and replace them from the backup. Continue?'))return;
+  setMsg('restoreMsg','Restoring…');
+  try{
+    const fd=new FormData(); fd.append('password',pw); fd.append('file',file);
+    const d=await fetch('/admin/restore',{method:'POST',headers:{Authorization:'Bearer '+state.token},body:fd})
+      .then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||'Restore failed');return j;});
+    setMsg('restoreMsg',`Restored ${d.imported} entries (${d.skipped} skipped)`);
+    await loadEntries();
+  }catch(e){setMsg('restoreMsg',e.message,true);}
+});
+
+// ── Export / Import CSV ────────────────────────────────────────────
+$('exportCsvBtn').addEventListener('click',async()=>{
+  setMsg('exportMsg','Exporting…');
+  try{
+    const res=await fetch('/admin/export/csv',{headers:{Authorization:'Bearer '+state.token}});
+    if(!res.ok){const d=await res.json().catch(()=>({}));throw new Error(d.detail||'Export failed');}
+    const blob=await res.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='suckpasswords_import_template.csv'; a.click();
+    URL.revokeObjectURL(url);
+    setMsg('exportMsg','Exported!');
+  }catch(e){setMsg('exportMsg',e.message,true);}
+});
+
+$('importCsvBtn').addEventListener('click',async()=>{
+  const file=$('importCsvFile').files[0];
+  if(!file){setMsg('importMsg','Select a CSV file',true);return;}
+  setMsg('importMsg','Importing…');
+  try{
+    const fd=new FormData(); fd.append('file',file);
+    const d=await fetch('/admin/import/csv',{method:'POST',headers:{Authorization:'Bearer '+state.token},body:fd})
+      .then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||'Import failed');return j;});
+    setMsg('importMsg',`Imported ${d.imported} entries (${d.skipped} skipped)`);
+    await loadEntries();
+  }catch(e){setMsg('importMsg',e.message,true);}
+});
+
+$('saveLdapBtn').addEventListener('click',async()=>{
+  const body={
+    enabled:$('ldapEnabled').checked,
+    server_url:$('ldapServerUrl').value.trim(),
+    use_ssl:$('ldapUseSsl').checked,
+    bind_dn:$('ldapBindDn').value.trim(),
+    bind_password:$('ldapBindPassword').value||null,
+    base_dn:$('ldapBaseDn').value.trim(),
+    user_filter:$('ldapUserFilter').value.trim()||'(sAMAccountName={username})',
+    username_attr:$('ldapUsernameAttr').value.trim()||'sAMAccountName',
+    email_attr:$('ldapEmailAttr').value.trim()||'mail',
+    required_group_dn:$('ldapRequiredGroup').value.trim(),
+    auto_provision:$('ldapAutoProvision').checked,
+    default_role:$('ldapDefaultRole').value.trim(),
+  };
+  try{await api('/admin/ldap',{method:'PUT',body:JSON.stringify(body)});setMsg('ldapMsg','Saved!');await loadLdapConfig();}
+  catch(e){setMsg('ldapMsg',e.message,true);}
+});
+$('testLdapBtn').addEventListener('click',async()=>{
+  setMsg('ldapMsg','Testing\u2026');
+  try{const d=await api('/admin/ldap/test',{method:'POST'});setMsg('ldapMsg','\u2705 '+d.message);}
+  catch(e){setMsg('ldapMsg','\u274c '+e.message,true);}
+});
+$('syncLdapBtn').addEventListener('click',async()=>{
+  setMsg('ldapMsg','Syncing\u2026');
+  try{
+    const d=await api('/admin/ldap/sync',{method:'POST'});
+    const parts=['\u2705 '+d.message,'found: '+d.total_found,'created: '+d.created];
+    if(d.skipped_already_exists) parts.push('already exist: '+d.skipped_already_exists);
+    if(d.skipped_no_username_attr) parts.push('no username attr: '+d.skipped_no_username_attr);
+    if(d.skipped_not_in_group) parts.push('not in group: '+d.skipped_not_in_group);
+    if(d.deleted_not_in_group) parts.push('deleted (not in group): '+d.deleted_not_in_group);
+    setMsg('ldapMsg',parts.join(' | '));
+  }
+  catch(e){setMsg('ldapMsg','\u274c '+e.message,true);}
+});
+
+// ── Sidebar resize ──────────────────────────────────────────────
+(function(){
+  const sb=$('sidebar'), rz=$('sidebarResizer');
+  const STOR='sp_sidebar_w';
+  const saved=parseInt(localStorage.getItem(STOR),10);
+  if (saved&&saved>=160&&saved<=480) sb.style.width=saved+'px';
+  let startX=0, startW=0;
+  rz.addEventListener('mousedown',ev=>{
+    ev.preventDefault(); startX=ev.clientX; startW=sb.offsetWidth;
+    rz.classList.add('dragging'); document.body.style.cursor='col-resize'; document.body.style.userSelect='none';
+    const onMove=mv=>{ const w=Math.min(480,Math.max(160,startW+(mv.clientX-startX))); sb.style.width=w+'px'; };
+    const onUp=()=>{ rz.classList.remove('dragging'); document.body.style.cursor=''; document.body.style.userSelect='';
+      localStorage.setItem(STOR,sb.offsetWidth); document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); };
+    document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp);
+  });
+})();
+
+bootstrapApp();
+
+// ── Theme ─────────────────────────────────────────────────────────
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const icon = $('themeToggleBtn').querySelector('.ico');
+  if (icon) icon.textContent = theme === 'light' ? '🌙' : '☀️';
+  localStorage.setItem('sp_theme_' + (state.user?.username || '_'), theme);
+}
+function initTheme() {
+  const saved = localStorage.getItem('sp_theme_' + (state.user?.username || '_')) || 'dark';
+  applyTheme(saved);
+}
+$('themeToggleBtn').addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+});
+
+// ── About modal ───────────────────────────────────────────────────
+$('aboutBtn').addEventListener('click', () => openModal('aboutModal'));
+$('closeAboutModalBtn').addEventListener('click', () => closeModal('aboutModal'));
+</script>
+</body>
+</html>
