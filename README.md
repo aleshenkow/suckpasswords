@@ -20,10 +20,6 @@ A self-hosted corporate password vault with a web UI, LDAP/AD authentication, ro
 
 ## Screenshots
 
-<p align="center">
-    <img src="docks/images/SuckMain.png" alt="SuckPasswords Main Dashboard" width="100%" />
-</p>
-
 | Login | Main Vault |
 |---|---|
 | ![SuckPasswords Login](docks/images/SuckLogin.png) | ![SuckPasswords Main Dashboard](docks/images/SuckMain.png) |
@@ -119,7 +115,7 @@ LDAP settings can also be managed from the Admin → LDAP tab in the UI.
 
 - Use certificates from a trusted CA (Let's Encrypt, internal PKI, etc.)
 - Set strong, unique values for `APP_SECRET_KEY` and `APP_DATA_ENCRYPTION_KEY`
-- Restrict access to port `8888` via firewall or VPN
+- Restrict access to port `443` via firewall or VPN
 - Store `.env` outside the repository and never commit it
 - Rotate secrets and backup encryption keys on a schedule
 - Review backup files — they contain all vault entries encrypted with the backup password
@@ -147,7 +143,7 @@ suckpasswords/
 
 ## API
 
-Interactive docs available at **https://localhost:8888/docs** when the stack is running.
+Interactive docs available at **https://localhost/docs** when the stack is running.
 
 Key endpoints:
 
