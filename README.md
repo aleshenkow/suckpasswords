@@ -1,164 +1,156 @@
 # SuckPasswords
 
-Self-hosted хранилище паролей с поддержкой:
-- Docker Compose
-- HTTPS через NGINX (порт 8888)
-- авторизации через LDAP/AD с фильтрацией по группе
-- иерархии папок
-- записей с полями: title, login, password, url, description
-- генератора паролей
-- ролей и гибких прав на чтение/запись по типам записей
-- встроенного администратора `suckadmin`
+A self-hosted corporate password vault with a web UI, LDAP/AD authentication, role-based access control, and AES-256-GCM encrypted storage.
 
-## Архитектура
+## Features
 
-- `nginx`:
-  - принимает HTTPS трафик на `:8888`
-  - проксирует в backend
-- `backend`:
-  - FastAPI API + OpenAPI UI (`/docs`)
-  - JWT auth
-  - LDAP/AD auth (опционально)
-  - RBAC
-- `db`:
-  - PostgreSQL
+- **HTTPS only** — nginx reverse proxy with TLS 1.2/1.3
+- **LDAP / Active Directory** auth with group membership check and auto-provisioning
+- **3-tier RBAC** — General, DomainAdmin, EnterpriseAdmin entry levels
+- **Folder tree** with drag-and-drop organisation
+- **Entry types** — Password, SSH, API token
+- **Password generator** and weak-password detection
+- **AES-256-GCM** encryption for stored secrets
+- **Encrypted backup / restore** (`.spbackup` files)
+- **CSV import / export**
+- **Inactivity auto-logout** after 5 minutes
+- **Account lockout** after 5 failed login attempts (unlocks after 15 min)
+- **Brute-force rate limiting** on the login endpoint (nginx)
+- Dark / light theme
 
-## Быстрый старт
+## Architecture
 
-1. Перейдите в каталог проекта:
-
-```bash
-cd /Users/a.aleschenkow/SuckPasswords/GitHub/suckpasswords
+```
+Browser → nginx :8888 (HTTPS) → FastAPI :8000 → PostgreSQL
 ```
 
-2. Подготовьте окружение:
+- **nginx** — TLS termination, security headers, rate limiting
+- **backend** — FastAPI + SQLAlchemy 2.0, JWT auth, bcrypt passwords
+- **db** — PostgreSQL 16
+
+## Quick Start
+
+### 1. Clone and enter the directory
+
+```bash
+git clone https://github.com/your-org/suckpasswords.git
+cd suckpasswords
+```
+
+### 2. Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-3. Сгенерируйте dev TLS-сертификаты:
+Edit `.env` and set strong values for at minimum:
+
+| Variable | Description |
+|---|---|
+| `POSTGRES_PASSWORD` | PostgreSQL password |
+| `APP_SECRET_KEY` | JWT signing key (32+ random chars) |
+| `APP_DATA_ENCRYPTION_KEY` | Entry encryption key (32+ random chars) |
+| `APP_ADMIN_PASSWORD` | Initial admin password |
+
+### 3. Generate a dev TLS certificate
 
 ```bash
-cd certs
-chmod +x generate-dev-cert.sh
-./generate-dev-cert.sh
-cd ..
+cd certs && chmod +x generate-dev-cert.sh && ./generate-dev-cert.sh && cd ..
 ```
 
-4. Запустите стек:
+For production, replace `certs/server.crt` and `certs/server.key` with certificates from a trusted CA.
+
+### 4. Start
 
 ```bash
 docker compose up -d --build
 ```
 
-5. Откройте веб-интерфейс API:
+Open **https://localhost:8888** in your browser.
 
-- https://localhost:8888/docs
+> The self-signed certificate will trigger a browser warning — accept it for local dev, use a real cert in production.
 
-## Дефолтный админ
+## Default admin account
 
-Создается автоматически при первом старте backend:
-- username: `suckadmin`
-- password: `suckpassword`
+Created automatically on first startup:
 
-Важно: сразу смените пароль в продакшене.
+| Field | Value |
+|---|---|
+| Username | `suckadmin` |
+| Password | `suckpassword` |
 
-## LDAP/AD
+**Change the password immediately after first login.**
 
-Настройте параметры в `.env`:
-- `AD_ENABLED=true`
-- `AD_SERVER_URI=ldaps://...`
-- `AD_BASE_DN=...`
-- `AD_BIND_DN=...`
-- `AD_BIND_PASSWORD=...`
-- `AD_USER_FILTER=(sAMAccountName={username})`
-- `AD_REQUIRED_GROUP_DN=...`
+## LDAP / Active Directory
 
-Логин:
-- Если найден локальный пользователь `source=local`, проверяется локальный пароль.
-- Иначе выполняется bind/check в AD.
-- Если AD-пользователь успешно аутентифицирован, локальный профиль создается автоматически.
+Set the following variables in `.env`:
 
-## Основные API
-
-### 1) Логин
-
-`POST /auth/login`
-
-```json
-{
-  "username": "suckadmin",
-  "password": "suckpassword"
-}
+```dotenv
+AD_ENABLED=true
+AD_SERVER_URI=ldaps://dc.example.local:636
+AD_BASE_DN=DC=example,DC=local
+AD_BIND_DN=CN=svc-bind,OU=ServiceAccounts,DC=example,DC=local
+AD_BIND_PASSWORD=your_bind_password
+AD_USER_FILTER=(sAMAccountName={username})
+AD_REQUIRED_GROUP_DN=CN=VaultUsers,OU=Groups,DC=example,DC=local
 ```
 
-Ответ содержит `access_token`.
+Authentication flow:
+1. If a local (`source=local`) user exists → local password check.
+2. Otherwise → LDAP bind/search using the configured filter.
+3. On success, a local profile is created automatically (if auto-provisioning is enabled).
 
-### 2) Текущий пользователь
+LDAP settings can also be managed from the Admin → LDAP tab in the UI.
 
-`GET /users/me`
+## Security notes for production
 
-Нужен Bearer token.
+- Use certificates from a trusted CA (Let's Encrypt, internal PKI, etc.)
+- Set strong, unique values for `APP_SECRET_KEY` and `APP_DATA_ENCRYPTION_KEY`
+- Restrict access to port `8888` via firewall or VPN
+- Store `.env` outside the repository and never commit it
+- Rotate secrets and backup encryption keys on a schedule
+- Review backup files — they contain all vault entries encrypted with the backup password
 
-### 3) Папки
+## Project structure
 
-- `POST /folders`
-- `GET /folders`
+```
+suckpasswords/
+├── docker-compose.yml
+├── .env.example
+├── nginx/nginx.conf
+├── certs/generate-dev-cert.sh
+└── backend/
+    ├── Dockerfile
+    ├── requirements.txt
+    └── app/
+        ├── main.py       # API routes
+        ├── models.py     # SQLAlchemy models
+        ├── schemas.py    # Pydantic schemas
+        ├── security.py   # JWT, bcrypt, Fernet helpers
+        ├── config.py     # Settings from .env
+        ├── database.py   # DB engine / session
+        └── ui.html       # Single-page web UI
+```
 
-### 4) Записи
+## API
 
-- `POST /entries`
-- `GET /entries`
+Interactive docs available at **https://localhost:8888/docs** when the stack is running.
 
-Поля записи:
-- `title`
-- `login`
-- `password`
-- `url`
-- `description`
+Key endpoints:
 
-### 5) Генератор паролей
+| Method | Path | Description |
+|---|---|---|
+| POST | `/auth/login` | Obtain JWT token |
+| GET | `/users/me` | Current user info |
+| GET/POST | `/folders` | List / create folders |
+| GET/POST | `/entries` | List / create entries |
+| PUT/DELETE | `/entries/{id}` | Update / delete entry |
+| GET | `/password/generate` | Generate a random password |
+| POST | `/admin/backup` | Create encrypted backup |
+| POST | `/admin/restore` | Restore from backup |
+| GET | `/admin/users` | List users (admin) |
+| POST | `/admin/ldap` | Save LDAP config (admin) |
 
-`GET /password/generate?length=24`
+## License
 
-### 6) Роли и права (admin)
-
-- `POST /admin/roles`
-- `POST /admin/permissions`
-- `POST /admin/roles/assign`
-
-Права задаются на тип записи (`entry_type_code`) с флагами:
-- `can_read`
-- `can_write`
-
-## Безопасность
-
-Реализовано:
-- HTTPS only через NGINX
-- TLS 1.2/1.3
-- Security headers
-- JWT auth
-- bcrypt для паролей пользователей
-- шифрование паролей записей на уровне приложения
-
-Рекомендации для продакшена:
-- использовать сертификаты от доверенного CA
-- сменить `APP_SECRET_KEY`, `APP_DATA_ENCRYPTION_KEY`, все пароли в `.env`
-- убрать дефолтный пароль admin
-- ограничить доступ к `:8888` firewall/VPN
-- добавить аудит-логирование, ротацию ключей и бэкапы
-
-## Структура проекта
-
-- `docker-compose.yml`
-- `nginx/nginx.conf`
-- `certs/generate-dev-cert.sh`
-- `backend/Dockerfile`
-- `backend/requirements.txt`
-- `backend/app/main.py`
-- `backend/app/models.py`
-- `backend/app/security.py`
-- `backend/app/config.py`
-- `backend/app/database.py`
-- `backend/app/schemas.py`
+MIT

@@ -1,9 +1,28 @@
+# Environment / secrets
 .env
+*.env
+
+# TLS certificates (generated locally)
+certs/server.key
+certs/server.crt
+certs/*.pem
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 *.sqlite3
 .venv/
-certs/server.key
-certs/server.crt
+venv/
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
