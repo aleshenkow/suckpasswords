@@ -31,7 +31,7 @@ A self-hosted corporate password vault with a web UI, LDAP/AD authentication, ro
 ## Architecture
 
 ```
-Browser → nginx :8888 (HTTPS) → FastAPI :8000 → PostgreSQL
+Browser → nginx :443 (HTTPS) → FastAPI :8000 → PostgreSQL
 ```
 
 - **nginx** — TLS termination, security headers, rate limiting
@@ -43,7 +43,7 @@ Browser → nginx :8888 (HTTPS) → FastAPI :8000 → PostgreSQL
 ### 1. Clone and enter the directory
 
 ```bash
-git clone https://github.com/your-org/suckpasswords.git
+git clone git@github.com:aleshenkow/suckpasswords.git
 cd suckpasswords
 ```
 
