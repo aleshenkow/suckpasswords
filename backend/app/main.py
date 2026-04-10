@@ -254,17 +254,26 @@ def on_startup() -> None:
             if old_role.name not in system_role_names:
                 db.delete(old_role)
 
-        admin = db.scalar(select(User).where(User.username == settings.app_admin_username))
-        if admin is None:
-            db.add(
-                User(
-                    username=settings.app_admin_username,
-                    email=settings.app_admin_email,
-                    password_hash=get_password_hash(settings.app_admin_password),
-                    is_superuser=True,
-                    source="local",
+        # Check if any superuser already exists
+        any_superuser = db.scalar(select(User).where(User.is_superuser.is_(True)))
+        if any_superuser is None:
+            # First run — admin credentials must be provided via APP_ADMIN_USERNAME / APP_ADMIN_PASSWORD
+            if not settings.app_admin_username or not settings.app_admin_password:
+                raise RuntimeError(
+                    "No admin user exists yet. "
+                    "Set APP_ADMIN_USERNAME and APP_ADMIN_PASSWORD in your .env file before starting the application."
                 )
-            )
+            admin = db.scalar(select(User).where(User.username == settings.app_admin_username))
+            if admin is None:
+                db.add(
+                    User(
+                        username=settings.app_admin_username,
+                        email=settings.app_admin_email or f"{settings.app_admin_username}@local",
+                        password_hash=get_password_hash(settings.app_admin_password),
+                        is_superuser=True,
+                        source="local",
+                    )
+                )
 
         # Ensure the "General" system folder exists
         general = db.scalar(select(Folder).where(Folder.is_system.is_(True)))

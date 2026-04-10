@@ -10,9 +10,9 @@ class Settings(BaseSettings):
     app_data_encryption_key: str = ""
     app_access_token_expire_minutes: int = 30
 
-    app_admin_username: str = "suckadmin"
-    app_admin_password: str = "suckpassword"
-    app_admin_email: str = "suckadmin@local"
+    app_admin_username: str = ""
+    app_admin_password: str = ""
+    app_admin_email: str = "admin@local"
 
     ad_enabled: bool = False
     ad_server_uri: str = ""

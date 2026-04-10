@@ -70,16 +70,19 @@ Open **https://localhost:8888** in your browser.
 
 > The self-signed certificate will trigger a browser warning — accept it for local dev, use a real cert in production.
 
-## Default admin account
+## Admin account
 
-Created automatically on first startup:
+On **first startup**, the application creates the initial admin account using the credentials you provide in `.env`:
 
-| Field | Value |
-|---|---|
-| Username | `suckadmin` |
-| Password | `suckpassword` |
+```dotenv
+APP_ADMIN_USERNAME=your_admin_username
+APP_ADMIN_PASSWORD=your_strong_admin_password
+APP_ADMIN_EMAIL=admin@local       # optional
+```
 
-**Change the password immediately after first login.**
+> If `APP_ADMIN_USERNAME` or `APP_ADMIN_PASSWORD` is empty and no admin user exists yet, the application will refuse to start with a clear error message.
+
+Once the account is created the env variables are no longer used for login — you can clear them from `.env` if you prefer.
 
 ## LDAP / Active Directory
 
