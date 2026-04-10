@@ -18,6 +18,16 @@ A self-hosted corporate password vault with a web UI, LDAP/AD authentication, ro
 - **Brute-force rate limiting** on the login endpoint (nginx)
 - Dark / light theme
 
+## Screenshots
+
+<p align="center">
+    <img src="docks/images/SuckMain.png" alt="SuckPasswords Main Dashboard" width="100%" />
+</p>
+
+| Login | Main Vault |
+|---|---|
+| ![SuckPasswords Login](docks/images/SuckLogin.png) | ![SuckPasswords Main Dashboard](docks/images/SuckMain.png) |
+
 ## Architecture
 
 ```
