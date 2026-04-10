@@ -240,6 +240,9 @@ def on_startup() -> None:
             "ALTER TABLE folders ADD COLUMN IF NOT EXISTS is_system BOOLEAN DEFAULT FALSE NOT NULL"
         ))
         conn.execute(text(
+            "ALTER TABLE folders ADD COLUMN IF NOT EXISTS icon VARCHAR(32) DEFAULT '📁' NOT NULL"
+        ))
+        conn.execute(text(
             "ALTER TABLE entries ADD COLUMN IF NOT EXISTS level VARCHAR(32) DEFAULT 'general' NOT NULL"
         ))
         conn.execute(text(
@@ -298,7 +301,7 @@ def on_startup() -> None:
         # Ensure the "General" system folder exists
         general = db.scalar(select(Folder).where(Folder.is_system.is_(True)))
         if general is None:
-            db.add(Folder(name="General", parent_id=None, is_system=True))
+            db.add(Folder(name="General", parent_id=None, icon="📋", is_system=True))
 
         # Bootstrap LDAP config row (id=1) from env vars if present
         ldap_row = db.scalar(select(LdapConfig).where(LdapConfig.id == 1))
@@ -426,11 +429,17 @@ def create_folder(payload: FolderCreate, db: Session = Depends(get_db), user: Us
     _assert_admin(user)
     _assert_valid_parent(db, payload.parent_id)
 
-    folder = Folder(name=payload.name.strip(), parent_id=payload.parent_id)
+    folder = Folder(name=payload.name.strip(), parent_id=payload.parent_id, icon=(payload.icon or "📁"))
     db.add(folder)
     db.commit()
     db.refresh(folder)
-    return FolderResponse(id=folder.id, name=folder.name, parent_id=folder.parent_id, is_system=folder.is_system)
+    return FolderResponse(
+        id=folder.id,
+        name=folder.name,
+        parent_id=folder.parent_id,
+        icon=folder.icon,
+        is_system=folder.is_system,
+    )
 
 
 @app.get("/folders", response_model=list[FolderResponse])
@@ -439,7 +448,10 @@ def list_folders(db: Session = Depends(get_db), user: User = Depends(get_current
     folders = db.scalars(select(Folder).order_by(Folder.parent_id, Folder.name)).all()
     # System folders (General) always first
     folders = sorted(folders, key=lambda f: (0 if f.is_system else 1, f.name))
-    return [FolderResponse(id=f.id, name=f.name, parent_id=f.parent_id, is_system=f.is_system) for f in folders]
+    return [
+        FolderResponse(id=f.id, name=f.name, parent_id=f.parent_id, icon=f.icon, is_system=f.is_system)
+        for f in folders
+    ]
 
 
 @app.put("/folders/{folder_id}/rename", response_model=FolderResponse)
@@ -458,9 +470,17 @@ def rename_folder(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="System folders cannot be renamed")
 
     folder.name = payload.name.strip()
+    if payload.icon is not None:
+        folder.icon = payload.icon or "📁"
     db.commit()
     db.refresh(folder)
-    return FolderResponse(id=folder.id, name=folder.name, parent_id=folder.parent_id, is_system=folder.is_system)
+    return FolderResponse(
+        id=folder.id,
+        name=folder.name,
+        parent_id=folder.parent_id,
+        icon=folder.icon,
+        is_system=folder.is_system,
+    )
 
 
 @app.patch("/folders/{folder_id}/move", response_model=FolderResponse)
@@ -495,7 +515,13 @@ def move_folder(
     folder.parent_id = payload.parent_id
     db.commit()
     db.refresh(folder)
-    return FolderResponse(id=folder.id, name=folder.name, parent_id=folder.parent_id, is_system=folder.is_system)
+    return FolderResponse(
+        id=folder.id,
+        name=folder.name,
+        parent_id=folder.parent_id,
+        icon=folder.icon,
+        is_system=folder.is_system,
+    )
 
 
 @app.delete("/folders/{folder_id}")

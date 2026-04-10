@@ -75,6 +75,7 @@ class Folder(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), index=True)
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("folders.id", ondelete="SET NULL"), nullable=True)
+    icon: Mapped[str] = mapped_column(String(32), default="📁")
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
 
 

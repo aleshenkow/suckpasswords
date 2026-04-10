@@ -748,6 +748,12 @@
 <div class="modal-backdrop" id="createFolderModal">
   <div class="modal">
     <div class="modal-head"><h3>&#128193; Create folder</h3><button class="modal-close" id="closeCreateFolderModalBtn">&#10005;</button></div>
+    <label>Icon
+      <button type="button" id="createFolderIconToggleBtn" style="background:none;border:none;cursor:pointer;font-size:22px;padding:0 4px;line-height:1;vertical-align:middle" title="Click to change icon"><span id="createFolderIconPreview" class="icon-preview-lbl">📁</span></button>
+      <span style="font-size:11px;color:var(--muted)">(click to change)</span>
+    </label>
+    <input type="hidden" id="createFolderIconHidden" value="📁"/>
+    <div class="icon-picker-grid hidden" id="createFolderIconPickerGrid"></div>
     <label for="createFolderName">Name</label>
     <input id="createFolderName" class="field" placeholder="Production"/>
     <label for="createFolderParent">Parent folder</label>
@@ -760,6 +766,12 @@
 <div class="modal-backdrop" id="renameFolderModal">
   <div class="modal">
     <div class="modal-head"><h3>&#9999;&#65039; Rename folder</h3><button class="modal-close" id="closeRenameFolderModalBtn">&#10005;</button></div>
+    <label>Icon
+      <button type="button" id="renameFolderIconToggleBtn" style="background:none;border:none;cursor:pointer;font-size:22px;padding:0 4px;line-height:1;vertical-align:middle" title="Click to change icon"><span id="renameFolderIconPreview" class="icon-preview-lbl">📁</span></button>
+      <span style="font-size:11px;color:var(--muted)">(click to change)</span>
+    </label>
+    <input type="hidden" id="renameFolderIconHidden" value="📁"/>
+    <div class="icon-picker-grid hidden" id="renameFolderIconPickerGrid"></div>
     <label for="renameFolderName">New name</label>
     <input id="renameFolderName" class="field" placeholder="New name"/>
     <button class="btn btn-main btn-full" style="margin-top:16px" id="saveRenameFolderBtn">Save</button>
@@ -905,9 +917,29 @@ function buildIconPicker() {
   const g=$('iconPickerGrid'); g.innerHTML='';
   ICONS.forEach(ic=>{ const d=document.createElement('div'); d.className='icon-opt'; d.textContent=ic; d.addEventListener('click',()=>{ selectIcon(ic); $('iconPickerGrid').classList.add('hidden'); }); g.appendChild(d); });
 }
+function buildSimpleIconPicker(gridId,onPick) {
+  const g=$(gridId); g.innerHTML='';
+  ICONS.forEach(ic=>{
+    const d=document.createElement('div');
+    d.className='icon-opt';
+    d.textContent=ic;
+    d.addEventListener('click',()=>onPick(ic));
+    g.appendChild(d);
+  });
+}
 function selectIcon(ic) {
   $('entryIconHidden').value=ic; $('entryIconPreview').textContent=ic;
   $('iconPickerGrid').querySelectorAll('.icon-opt').forEach(x=>x.classList.toggle('selected',x.textContent===ic));
+}
+function selectCreateFolderIcon(ic) {
+  $('createFolderIconHidden').value=ic;
+  $('createFolderIconPreview').textContent=ic;
+  $('createFolderIconPickerGrid').querySelectorAll('.icon-opt').forEach(x=>x.classList.toggle('selected',x.textContent===ic));
+}
+function selectRenameFolderIcon(ic) {
+  $('renameFolderIconHidden').value=ic;
+  $('renameFolderIconPreview').textContent=ic;
+  $('renameFolderIconPickerGrid').querySelectorAll('.icon-opt').forEach(x=>x.classList.toggle('selected',x.textContent===ic));
 }
 
 // ── Utils ─────────────────────────────────────────────────────────
@@ -992,7 +1024,7 @@ function fillParentSel(id,excl=null) {
   // "General" (system folder) acts as root
   const general=state.folders.find(f=>f.is_system);
   if (general && general.id!==excl) {
-    s.appendChild(Object.assign(document.createElement('option'),{value:String(general.id),textContent:'📋 '+general.name+' (General)'}));
+    s.appendChild(Object.assign(document.createElement('option'),{value:String(general.id),textContent:(general.icon||'📋')+' '+general.name+' (General)'}));
   } else {
     s.appendChild(Object.assign(document.createElement('option'),{value:'',textContent:'-- Root --'}));
   }
@@ -1001,7 +1033,7 @@ function fillParentSel(id,excl=null) {
   for (const f of sorted) {
     if (f.id===excl) continue;
     const opt=document.createElement('option'); opt.value=String(f.id);
-    opt.textContent=f.name;
+    opt.textContent=(f.icon||'📁')+' '+f.name;
     s.appendChild(opt);
   }
 }
@@ -1043,7 +1075,7 @@ function renderFolderTree() {
       });
 
       const ico=document.createElement('span'); ico.className='f-icon';
-      ico.textContent=f.is_system?'🏠':(depth===0?'📁':'📂');
+      ico.textContent=f.is_system?(f.icon||'📋'):(f.icon||'📁');
 
       if (!f.is_system) {
         ico.draggable=true; ico.title='Drag to move';
@@ -1081,7 +1113,7 @@ function renderFolderTree() {
       });
 
       const nm=document.createElement('span'); nm.className='f-name';
-      nm.textContent=f.is_system?'📋 '+f.name:f.name;
+      nm.textContent=f.name;
       if (f.is_system) nm.style.fontWeight='700';
 
       const cnt=state.entries.filter(e=>e.folder_id===f.id).length;
@@ -1091,7 +1123,14 @@ function renderFolderTree() {
       if (!f.is_system) {
         const mk=(title,ic,cls,fn)=>{ const b=document.createElement('button'); b.className='btn-icon'+cls; b.title=title; b.textContent=ic; b.onclick=ev=>{ev.stopPropagation();fn();}; return b; };
         acts.append(
-          mk('Rename','✏️','',()=>{ state.selectedFolderId=f.id; $('renameFolderName').value=f.name; setMsg('renameFolderMsg',''); openModal('renameFolderModal'); }),
+          mk('Rename','✏️','',()=>{
+            state.selectedFolderId=f.id;
+            $('renameFolderName').value=f.name;
+            selectRenameFolderIcon(f.icon||'📁');
+            $('renameFolderIconPickerGrid').classList.add('hidden');
+            setMsg('renameFolderMsg','');
+            openModal('renameFolderModal');
+          }),
           mk('Move','📦','',()=>{ state.selectedFolderId=f.id; fillParentSel('moveFolderParent',f.id); setMsg('moveFolderMsg',''); openModal('moveFolderModal'); }),
           mk('Delete','🗑️',' red',()=>{ state.selectedFolderId=f.id; $('deleteFolderTarget').textContent='Folder: '+f.name; $('deleteFolderStrategy').value='move_children_to_root'; setMsg('deleteFolderMsg',''); openModal('deleteFolderModal'); })
         );
@@ -1115,10 +1154,11 @@ function renderEntries() {
   const tbody=$('entriesTbody'); tbody.innerHTML='';
   const fid=state.selectedFolderId;
   const fName=fid!=null?(state.folders.find(f=>f.id===fid)||{}).name:null;
+  const fIcon=fid!=null?(state.folders.find(f=>f.id===fid)||{}).icon:null;
 
   // Section header + vault title
   if (fName) {
-    $('entriesSectionTitle').innerHTML='<span class="entries-title-icon">📂</span><span>'+esc(fName.toUpperCase())+'</span>';
+    $('entriesSectionTitle').innerHTML='<span class="entries-title-icon">'+esc(fIcon||'📁')+'</span><span>'+esc(fName.toUpperCase())+'</span>';
     $('vaultTitle').textContent=fName;
   } else {
     $('entriesSectionTitle').innerHTML='<span class="entries-title-icon">📂</span><span>Select a folder</span>';
@@ -1405,6 +1445,8 @@ async function bootstrapApp() {
     if (state.user.is_superuser) $('navAdmin').classList.remove('hidden');
     initTheme();
     buildIconPicker();
+    buildSimpleIconPicker('createFolderIconPickerGrid', ic=>{ selectCreateFolderIcon(ic); $('createFolderIconPickerGrid').classList.add('hidden'); });
+    buildSimpleIconPicker('renameFolderIconPickerGrid', ic=>{ selectRenameFolderIcon(ic); $('renameFolderIconPickerGrid').classList.add('hidden'); });
     await Promise.all([loadFolders(),loadEntries()]);
     startIdleTracking();
   } catch(e) {
@@ -1428,19 +1470,28 @@ $('loginPassword').addEventListener('keydown',ev=>{if(ev.key==='Enter')login();}
 $('loginPwEye').addEventListener('click',()=>{const f=$('loginPassword');f.type=f.type==='password'?'text':'password';});
 $('logoutBtn').addEventListener('click',logout);
 
-$('openFolderModalBtn').addEventListener('click',()=>{fillParentSel('createFolderParent');$('createFolderName').value='';setMsg('createFolderMsg','');openModal('createFolderModal');});
+$('openFolderModalBtn').addEventListener('click',()=>{
+  fillParentSel('createFolderParent');
+  $('createFolderName').value='';
+  selectCreateFolderIcon('📁');
+  $('createFolderIconPickerGrid').classList.add('hidden');
+  setMsg('createFolderMsg','');
+  openModal('createFolderModal');
+});
 $('closeCreateFolderModalBtn').addEventListener('click',()=>closeModal('createFolderModal'));
 $('saveCreateFolderBtn').addEventListener('click',async()=>{
   const name=$('createFolderName').value.trim(); if(!name){setMsg('createFolderMsg','Enter a name',true);return;}
   const pid=$('createFolderParent').value?Number($('createFolderParent').value):null;
-  try{await api('/folders',{method:'POST',body:JSON.stringify({name,parent_id:pid})});closeModal('createFolderModal');await loadFolders();}
+  const icon=$('createFolderIconHidden').value||'📁';
+  try{await api('/folders',{method:'POST',body:JSON.stringify({name,parent_id:pid,icon})});closeModal('createFolderModal');await loadFolders();}
   catch(e){setMsg('createFolderMsg',e.message,true);}
 });
 
 $('closeRenameFolderModalBtn').addEventListener('click',()=>closeModal('renameFolderModal'));
 $('saveRenameFolderBtn').addEventListener('click',async()=>{
   const name=$('renameFolderName').value.trim(); if(!name){setMsg('renameFolderMsg','Enter a name',true);return;}
-  try{await api('/folders/'+state.selectedFolderId+'/rename',{method:'PUT',body:JSON.stringify({name})});closeModal('renameFolderModal');await loadFolders();}
+  const icon=$('renameFolderIconHidden').value||'📁';
+  try{await api('/folders/'+state.selectedFolderId+'/rename',{method:'PUT',body:JSON.stringify({name,icon})});closeModal('renameFolderModal');await loadFolders();}
   catch(e){setMsg('renameFolderMsg',e.message,true);}
 });
 
@@ -1485,6 +1536,8 @@ $('closeEntryModalBtn').addEventListener('click',()=>closeModal('entryModal'));
 $('saveEntryBtn').addEventListener('click',saveEntry);
 $('deleteEntryBtn').addEventListener('click',deleteEntry);
 $('entryIconToggleBtn').addEventListener('click',()=>$('iconPickerGrid').classList.toggle('hidden'));
+$('createFolderIconToggleBtn').addEventListener('click',()=>$('createFolderIconPickerGrid').classList.toggle('hidden'));
+$('renameFolderIconToggleBtn').addEventListener('click',()=>$('renameFolderIconPickerGrid').classList.toggle('hidden'));
 document.querySelectorAll('#entryTypeTabs .type-tab').forEach(tab=>{
   tab.addEventListener('click',()=>{
     document.querySelectorAll('#entryTypeTabs .type-tab').forEach(t=>t.classList.remove('active'));

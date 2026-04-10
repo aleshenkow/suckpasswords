@@ -16,17 +16,20 @@ class LoginRequest(BaseModel):
 class FolderCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     parent_id: int | None = None
+    icon: str = "📁"
 
 
 class FolderResponse(BaseModel):
     id: int
     name: str
     parent_id: int | None
+    icon: str = "📁"
     is_system: bool = False
 
 
 class FolderRename(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+    icon: str | None = None
 
 
 class FolderMove(BaseModel):
