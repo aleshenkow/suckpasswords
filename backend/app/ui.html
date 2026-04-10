@@ -288,6 +288,23 @@
     .checkbox-row label{margin:0;color:var(--ink);font-weight:600;cursor:pointer;font-size:13px}
 
     /* ═══════════════ LOGIN ═══════════════ */
+    /* ── Aurora (login background) ── */
+    @keyframes auroraA{0%,100%{transform:translate(-10%,-10%) scale(1.1)}50%{transform:translate(8%,6%) scale(1)}}
+    @keyframes auroraB{0%,100%{transform:translate(10%,8%) scale(1)}50%{transform:translate(-6%,-10%) scale(1.15)}}
+    @keyframes auroraC{0%,100%{transform:translate(0%,10%) scale(1)}60%{transform:translate(-8%,-6%) scale(1.1)}}
+    .aurora-blob{
+      position:absolute;border-radius:50%;filter:blur(80px);
+      pointer-events:none;animation-timing-function:ease-in-out;animation-iteration-count:infinite;
+    }
+    .aurora-a{width:440px;height:440px;background:radial-gradient(#1a6fff55,transparent 70%);top:-120px;left:-80px;animation:auroraA 12s infinite}
+    .aurora-b{width:380px;height:380px;background:radial-gradient(#6340ff44,transparent 70%);bottom:-80px;right:-60px;animation:auroraB 15s infinite}
+    .aurora-c{width:320px;height:320px;background:radial-gradient(#3ecf8e33,transparent 70%);top:30%;left:40%;animation:auroraC 18s infinite}
+    [data-theme="light"] .aurora-a{background:radial-gradient(#93c5fd55,transparent 70%)}
+    [data-theme="light"] .aurora-b{background:radial-gradient(#a78bfa44,transparent 70%)}
+    [data-theme="light"] .aurora-c{background:radial-gradient(#6ee7b733,transparent 70%)}
+
+    /* ── Background canvas ── */
+    #bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;}
     .login-screen{
       position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
       background:var(--bg);z-index:200;padding:24px;
@@ -397,10 +414,14 @@
   </style>
 </head>
 <body>
+<canvas id="bgCanvas"></canvas>
 <div id="suckToast">🤦 Your password completely suck dude</div>
 
 <!-- ═══ LOGIN SCREEN ═══ -->
 <div class="login-screen" id="loginScreen">
+  <div class="aurora-blob aurora-a"></div>
+  <div class="aurora-blob aurora-b"></div>
+  <div class="aurora-blob aurora-c"></div>
   <div class="login-card">
     <div class="login-logo">
       <div class="brand-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" style="width:22px;height:22px"><rect x="19" y="29" width="26" height="20" rx="5" fill="white"/><path d="M23 29v-7a9 9 0 0 1 18 0v7" stroke="white" stroke-width="4" fill="none" stroke-linecap="round"/><circle cx="32" cy="38" r="3.5" fill="#4a6cf7"/></svg></div>
@@ -928,10 +949,20 @@ function visibleEntries() {
   if (q) list=list.filter(e=>(e.title+' '+e.login+' '+e.url+' '+e.description).toLowerCase().includes(q));
   return list;
 }
+function countUp(el, target, dur=600) {
+  const start=parseInt(el.textContent)||0; if(start===target)return;
+  const t0=performance.now();
+  function step(now){
+    const p=Math.min((now-t0)/dur,1);
+    el.textContent=Math.round(start+(target-start)*p);
+    if(p<1)requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
 function updateStats() {
-  $('statFolders').textContent=state.folders.length;
-  $('statEntries').textContent=state.entries.length;
-  $('statFiltered').textContent=visibleEntries().length;
+  countUp($('statFolders'),state.folders.length);
+  countUp($('statEntries'),state.entries.length);
+  countUp($('statFiltered'),visibleEntries().length);
 }
 
 // ── Selects ───────────────────────────────────────────────────────
@@ -1595,6 +1626,92 @@ $('themeToggleBtn').addEventListener('click', () => {
 // ── About modal ───────────────────────────────────────────────────
 $('aboutBtn').addEventListener('click', () => openModal('aboutModal'));
 $('closeAboutModalBtn').addEventListener('click', () => closeModal('aboutModal'));
+
+// ── Particle network background ───────────────────────────────────
+(function(){
+  const canvas=$('bgCanvas'), ctx=canvas.getContext('2d');
+  let W,H,raf;
+  const mouse={x:-9999,y:-9999};
+  const N=65;
+  const P=[];
+
+  function resize(){
+    W=canvas.width=window.innerWidth;
+    H=canvas.height=window.innerHeight;
+  }
+  window.addEventListener('resize',resize);
+  window.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+
+  function mkP(){
+    return{
+      x:Math.random()*W, y:Math.random()*H,
+      vx:(Math.random()-.5)*.35, vy:(Math.random()-.5)*.35,
+      r:Math.random()*1.4+.6
+    };
+  }
+
+  function init(){resize(); P.length=0; for(let i=0;i<N;i++) P.push(mkP());}
+
+  function isDark(){return (document.documentElement.getAttribute('data-theme')||'dark')==='dark';}
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    const dark=isDark();
+    const dotColor  = dark ? 'rgba(74,108,247,0.55)'  : 'rgba(74,108,247,0.25)';
+    const lineColor = dark ? 'rgba(74,108,247,0.10)'  : 'rgba(74,108,247,0.06)';
+    const mouseColor= dark ? 'rgba(74,158,255,0.50)'  : 'rgba(74,108,247,0.20)';
+    const LINK=130, MOUSE=160;
+
+    for(let i=0;i<N;i++){
+      const p=P[i];
+      // mouse soft attraction
+      const mdx=mouse.x-p.x, mdy=mouse.y-p.y;
+      const md=Math.sqrt(mdx*mdx+mdy*mdy);
+      if(md<MOUSE){ p.vx+=mdx/md*.012; p.vy+=mdy/md*.012; }
+      p.vx*=.98; p.vy*=.98;
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<-10)p.x=W+10; else if(p.x>W+10)p.x=-10;
+      if(p.y<-10)p.y=H+10; else if(p.y>H+10)p.y=-10;
+
+      // dot
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=dotColor;
+      ctx.fill();
+
+      // lines to neighbours
+      for(let j=i+1;j<N;j++){
+        const q=P[j];
+        const dx=p.x-q.x, dy=p.y-q.y;
+        const d=Math.sqrt(dx*dx+dy*dy);
+        if(d<LINK){
+          ctx.beginPath();
+          ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y);
+          ctx.strokeStyle=lineColor;
+          ctx.globalAlpha=1-(d/LINK);
+          ctx.lineWidth=.7;
+          ctx.stroke();
+          ctx.globalAlpha=1;
+        }
+      }
+
+      // line to mouse
+      if(md<MOUSE){
+        ctx.beginPath();
+        ctx.moveTo(p.x,p.y); ctx.lineTo(mouse.x,mouse.y);
+        ctx.strokeStyle=mouseColor;
+        ctx.globalAlpha=(1-(md/MOUSE))*.6;
+        ctx.lineWidth=.8;
+        ctx.stroke();
+        ctx.globalAlpha=1;
+      }
+    }
+    raf=requestAnimationFrame(draw);
+  }
+
+  init();
+  draw();
+})();
 </script>
 </body>
 </html>
