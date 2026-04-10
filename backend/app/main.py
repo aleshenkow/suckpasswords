@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import urlparse
 
 import csv as csv_module
 import io
@@ -126,12 +127,31 @@ def _get_ldap_row(db: Session) -> LdapConfig | None:
     return db.scalar(select(LdapConfig).where(LdapConfig.id == 1))
 
 
+def _build_ldap_server(server_url: str, use_ssl: bool, connect_timeout: int | None = None) -> Server:
+    """Build ldap3 Server from either host:port or ldap(s)://host:port input."""
+    raw_value = server_url.strip()
+    parsed = urlparse(raw_value)
+
+    host = raw_value
+    port = None
+    effective_use_ssl = use_ssl
+
+    if parsed.scheme in {"ldap", "ldaps"}:
+        if not parsed.hostname:
+            raise ValueError("LDAP server URL must include a valid hostname")
+        host = parsed.hostname
+        port = parsed.port
+        effective_use_ssl = parsed.scheme == "ldaps"
+
+    return Server(host, port=port, get_info=ALL, use_ssl=effective_use_ssl, connect_timeout=connect_timeout)
+
+
 def _do_ldap_auth(username: str, password: str, cfg: LdapConfig) -> bool:
     """Try to authenticate username/password against the configured LDAP/AD server."""
     if not cfg.server_url or not cfg.base_dn:
         return False
     try:
-        server = Server(cfg.server_url, get_info=ALL, use_ssl=cfg.use_ssl)
+        server = _build_ldap_server(cfg.server_url, cfg.use_ssl)
         bind_pwd = decrypt_secret(cfg.bind_password) if cfg.bind_password else ""
         with Connection(server, cfg.bind_dn, bind_pwd, auto_bind=True) as svc:
             user_filter = cfg.user_filter.format(username=username)
@@ -163,7 +183,7 @@ def _authenticate_with_ad(username: str, password: str) -> bool:
     if not settings.ad_server_uri or not settings.ad_base_dn:
         return False
 
-    server = Server(settings.ad_server_uri, get_info=ALL)
+    server = _build_ldap_server(settings.ad_server_uri, settings.ad_server_uri.startswith("ldaps://"))
     with Connection(server, settings.ad_bind_dn, settings.ad_bind_password, auto_bind=True) as service_conn:
         user_filter = settings.ad_user_filter.format(username=username)
         service_conn.search(
@@ -910,12 +930,14 @@ def test_ldap_connection(
     if cfg is None or not cfg.server_url:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LDAP is not configured")
     try:
-        server = Server(cfg.server_url, get_info=ALL, use_ssl=cfg.use_ssl, connect_timeout=5)
+        server = _build_ldap_server(cfg.server_url, cfg.use_ssl, connect_timeout=5)
         bind_pwd = decrypt_secret(cfg.bind_password) if cfg.bind_password else ""
         with Connection(server, cfg.bind_dn, bind_pwd, auto_bind=True) as conn:
             conn.search(search_base=cfg.base_dn, search_filter="(objectClass=*)", size_limit=1)
         return {"message": "Connection successful"}
     except Exception as exc:
+        import logging as _logging
+        _logging.exception("LDAP test connection failed: %s", exc)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
 
@@ -930,7 +952,7 @@ def sync_ldap_users(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LDAP is not enabled or configured")
 
     try:
-        server = Server(cfg.server_url, get_info=ALL, use_ssl=cfg.use_ssl, connect_timeout=5)
+        server = _build_ldap_server(cfg.server_url, cfg.use_ssl, connect_timeout=5)
         bind_pwd = decrypt_secret(cfg.bind_password) if cfg.bind_password else ""
         # Use wildcard for listing all matching users
         sync_filter = cfg.user_filter.format(username="*") if "{username}" in cfg.user_filter else cfg.user_filter
