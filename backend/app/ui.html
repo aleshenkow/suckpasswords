@@ -1466,6 +1466,7 @@ function logout() {
 
 // ── Events ────────────────────────────────────────────────────────
 $('loginBtn').addEventListener('click',login);
+$('loginUsername').addEventListener('keydown',ev=>{if(ev.key==='Enter')login();});
 $('loginPassword').addEventListener('keydown',ev=>{if(ev.key==='Enter')login();});
 $('loginPwEye').addEventListener('click',()=>{const f=$('loginPassword');f.type=f.type==='password'?'text':'password';});
 $('logoutBtn').addEventListener('click',logout);
