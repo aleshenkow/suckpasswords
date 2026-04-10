@@ -201,9 +201,16 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 @app.on_event("startup")
 def on_startup() -> None:
+    import logging
     from sqlalchemy import text
 
     from .config import settings
+
+    if settings.app_secret_key == "change_me":
+        logging.warning(
+            "SECURITY WARNING: APP_SECRET_KEY is the default 'change_me'. "
+            "Set a strong random secret in your .env file before production use!"
+        )
 
     Base.metadata.create_all(bind=engine)
 
@@ -217,6 +224,12 @@ def on_startup() -> None:
         ))
         conn.execute(text(
             "ALTER TABLE entries ADD COLUMN IF NOT EXISTS created_by VARCHAR(128) DEFAULT '' NOT NULL"
+        ))
+        conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0 NOT NULL"
+        ))
+        conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE DEFAULT NULL"
         ))
         conn.commit()
 
@@ -286,16 +299,27 @@ def index() -> HTMLResponse:
 
 @app.post("/auth/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    from datetime import datetime, timedelta, timezone
+
     user = db.scalar(select(User).where(User.username == payload.username))
     ldap_cfg = _get_ldap_row(db)
 
+    # ── Lockout check ───────────────────────────────────────────────
+    if user and user.locked_until and user.locked_until > datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Account locked — too many failed attempts. Try again in 15 minutes.",
+        )
+
+    auth_ok = True
+
     if user and user.source == "local":
         if not verify_password(payload.password, user.password_hash):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+            auth_ok = False
     elif ldap_cfg and ldap_cfg.enabled:
         if not _do_ldap_auth(payload.username, payload.password, ldap_cfg):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-        if user is None:
+            auth_ok = False
+        elif user is None:
             if not ldap_cfg.auto_provision:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Auto-provisioning is disabled")
             user = User(
@@ -316,8 +340,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     else:
         # Fallback: legacy env-var based AD auth
         if not _authenticate_with_ad(payload.username, payload.password):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-        if user is None:
+            auth_ok = False
+        elif user is None:
             user = User(
                 username=payload.username,
                 email=f"{payload.username}@ad.local",
@@ -329,8 +353,23 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
             db.add(user)
             db.commit()
 
+    if not auth_ok:
+        # Track failure and lock after 5 consecutive bad attempts
+        if user is not None:
+            user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+            if user.failed_login_attempts >= 5:
+                user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
+            db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    # Reset failure counter on successful login
+    if user.failed_login_attempts or user.locked_until:
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        db.commit()
 
     token = create_access_token(payload.username)
     return TokenResponse(access_token=token)

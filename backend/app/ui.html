@@ -401,6 +401,23 @@
 
     .hidden{display:none!important}
     @media(max-width:780px){.sidebar{width:190px}.stats-row{grid-template-columns:repeat(2,1fr)}.admin-grid{grid-template-columns:1fr}}
+    /* ── Idle-timeout warning bar ── */
+    #idleWarning{
+      position:fixed;top:0;left:0;right:0;z-index:600;
+      background:#1a1425;border-bottom:2px solid rgba(246,173,85,.6);
+      color:#f6ad55;font-size:13px;font-weight:500;
+      padding:10px 20px;display:flex;align-items:center;justify-content:center;gap:16px;
+      animation:slideDown .25s ease;
+    }
+    #idleWarning.hidden{display:none}
+    @keyframes slideDown{from{transform:translateY(-100%)}to{transform:translateY(0)}}
+    #idleWarning button{
+      background:rgba(246,173,85,.15);border:1px solid rgba(246,173,85,.5);
+      color:#f6ad55;border-radius:6px;padding:4px 12px;font-size:12px;font-weight:600;
+      cursor:pointer;transition:background .12s;
+    }
+    #idleWarning button:hover{background:rgba(246,173,85,.3)}
+
     /* ── Weak-password toast ── */
     #suckToast{
       position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(20px);
@@ -415,6 +432,10 @@
 </head>
 <body>
 <canvas id="bgCanvas"></canvas>
+<div id="idleWarning" class="hidden">
+  <span>&#9201; Session expires in <strong id="idleCountdown">30</strong>s — no activity detected</span>
+  <button id="idleStayBtn">Stay logged in</button>
+</div>
 <div id="suckToast">🤦 Your password completely suck dude</div>
 
 <!-- ═══ LOGIN SCREEN ═══ -->
@@ -1385,6 +1406,7 @@ async function bootstrapApp() {
     initTheme();
     buildIconPicker();
     await Promise.all([loadFolders(),loadEntries()]);
+    startIdleTracking();
   } catch(e) {
     localStorage.removeItem('sp_token'); state.token='';
     $('loginScreen').classList.remove('hidden'); $('appShell').classList.add('hidden');
@@ -1393,6 +1415,7 @@ async function bootstrapApp() {
 }
 
 function logout() {
+  stopIdleTracking();
   localStorage.removeItem('sp_token');
   Object.assign(state,{token:'',user:null,folders:[],entries:[],roles:[],users:[],selectedFolderId:null});
   $('loginScreen').classList.remove('hidden'); $('appShell').classList.add('hidden');
@@ -1622,6 +1645,52 @@ $('themeToggleBtn').addEventListener('click', () => {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
   applyTheme(current === 'dark' ? 'light' : 'dark');
 });
+
+// ── Inactivity auto-logout ────────────────────────────────────────
+const IDLE_MS = 5 * 60 * 1000;   // 5 minutes total idle window
+const WARN_MS = 30 * 1000;        // show warning 30 s before logout
+let _idleTimer = null, _warnTimer = null, _warnInterval = null;
+
+function _idleActivity() {
+  if (!state.token) return;
+  clearTimeout(_idleTimer);
+  clearTimeout(_warnTimer);
+  clearInterval(_warnInterval);
+  $('idleWarning').classList.add('hidden');
+  _warnTimer = setTimeout(_showIdleWarning, IDLE_MS - WARN_MS);
+  _idleTimer = setTimeout(() => {
+    stopIdleTracking();
+    logout();
+    setMsg('loginMsg', 'Session expired — logged out due to inactivity', true);
+  }, IDLE_MS);
+}
+
+function _showIdleWarning() {
+  let secs = Math.round(WARN_MS / 1000);
+  $('idleCountdown').textContent = secs;
+  $('idleWarning').classList.remove('hidden');
+  clearInterval(_warnInterval);
+  _warnInterval = setInterval(() => {
+    secs--;
+    $('idleCountdown').textContent = Math.max(secs, 0);
+    if (secs <= 0) clearInterval(_warnInterval);
+  }, 1000);
+}
+
+const _IDLE_EVENTS = ['mousemove','mousedown','keydown','touchstart','scroll','click'];
+
+function startIdleTracking() {
+  _IDLE_EVENTS.forEach(ev => window.addEventListener(ev, _idleActivity, {passive:true}));
+  _idleActivity();
+}
+
+function stopIdleTracking() {
+  clearTimeout(_idleTimer); clearTimeout(_warnTimer); clearInterval(_warnInterval);
+  $('idleWarning').classList.add('hidden');
+  _IDLE_EVENTS.forEach(ev => window.removeEventListener(ev, _idleActivity));
+}
+
+$('idleStayBtn').addEventListener('click', _idleActivity);
 
 // ── About modal ───────────────────────────────────────────────────
 $('aboutBtn').addEventListener('click', () => openModal('aboutModal'));
