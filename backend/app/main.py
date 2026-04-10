@@ -9,7 +9,7 @@ import os
 from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordBearer
-from ldap3 import ALL, Connection, Server
+from ldap3 import ALL, NONE, Connection, Server
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -143,7 +143,8 @@ def _build_ldap_server(server_url: str, use_ssl: bool, connect_timeout: int | No
         port = parsed.port
         effective_use_ssl = parsed.scheme == "ldaps"
 
-    return Server(host, port=port, get_info=ALL, use_ssl=effective_use_ssl, connect_timeout=connect_timeout)
+    # NONE avoids schema/rootDSE discovery on each login and cuts LDAP auth latency.
+    return Server(host, port=port, get_info=NONE, use_ssl=effective_use_ssl, connect_timeout=connect_timeout)
 
 
 def _do_ldap_auth(username: str, password: str, cfg: LdapConfig) -> bool:
