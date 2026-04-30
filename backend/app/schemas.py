@@ -150,3 +150,50 @@ class LdapConfigResponse(BaseModel):
     required_group_dn: str
     auto_provision: bool
     default_role: str
+
+
+class SmtpConfigSave(BaseModel):
+    enabled: bool = False
+    host: str = ""
+    port: int = 587
+    use_tls: bool = True
+    use_ssl: bool = False
+    anonymous: bool = False
+    username: str = ""
+    password: str | None = None      # None = keep existing stored password
+    from_email: str = ""
+    from_name: str = "SuckPasswords"
+    notify_on_create: bool = True
+    notify_on_update: bool = False
+    notify_on_delete: bool = False
+
+
+class SmtpConfigResponse(BaseModel):
+    enabled: bool
+    host: str
+    port: int
+    use_tls: bool
+    use_ssl: bool
+    anonymous: bool
+    username: str
+    password_set: bool
+    from_email: str
+    from_name: str
+    notify_on_create: bool
+    notify_on_update: bool
+    notify_on_delete: bool
+
+
+class SmtpTestRequest(BaseModel):
+    to_email: str = ""
+
+
+class AuditLogResponse(BaseModel):
+    id: int
+    created_at: str
+    username: str
+    action: str
+    resource_type: str
+    resource_id: str
+    details: str
+

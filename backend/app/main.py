@@ -17,8 +17,9 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from .database import Base, engine, get_db
-from .models import Entry, EntryType, Folder, LdapConfig, Role, RoleEntryTypePermission, User, UserRole
+from .models import AuditLog, Entry, EntryType, Folder, LdapConfig, Role, RoleEntryTypePermission, SmtpConfig, User, UserRole
 from .schemas import (
+    AuditLogResponse,
     EntryCreate,
     EntryResponse,
     EntryTypeResponse,
@@ -36,6 +37,9 @@ from .schemas import (
     RoleCreate,
     RoleResponse,
     RoleUnassign,
+    SmtpConfigResponse,
+    SmtpConfigSave,
+    SmtpTestRequest,
     TokenResponse,
     UserResponse,
 )
@@ -125,6 +129,159 @@ def _collect_descendants(parent_map: dict[int, int | None], root_id: int) -> lis
 
 def _get_ldap_row(db: Session) -> LdapConfig | None:
     return db.scalar(select(LdapConfig).where(LdapConfig.id == 1))
+
+
+# ── Audit log + email notifications ────────────────────────────────
+
+def _log_action(
+    db: Session,
+    username: str,
+    action: str,
+    resource_type: str = "",
+    resource_id: str | int = "",
+    details: str = "",
+) -> None:
+    """Append an audit-log row. Caller is responsible for db.commit()."""
+    db.add(AuditLog(
+        username=username or "",
+        action=action,
+        resource_type=resource_type,
+        resource_id=str(resource_id) if resource_id != "" else "",
+        details=details or "",
+    ))
+
+
+def _get_smtp_row(db: Session) -> "SmtpConfig | None":
+    return db.scalar(select(SmtpConfig).where(SmtpConfig.id == 1))
+
+
+def _smtp_send(cfg_data: dict, recipients: list[str], subject: str, body: str) -> None:
+    """Send a single email synchronously. Raises on error."""
+    import smtplib
+    from email.message import EmailMessage
+
+    if not cfg_data.get("host") or not recipients:
+        return
+    msg = EmailMessage()
+    from_email = cfg_data.get("from_email") or cfg_data.get("username") or "noreply@suckpasswords.local"
+    from_name = cfg_data.get("from_name") or "SuckPasswords"
+    msg["From"] = f"{from_name} <{from_email}>"
+    msg["To"] = ", ".join(recipients)
+    msg["Subject"] = subject
+    msg.set_content(body)
+
+    host = cfg_data["host"]
+    port = int(cfg_data.get("port") or (465 if cfg_data.get("use_ssl") else 587))
+    anonymous = bool(cfg_data.get("anonymous"))
+    username = cfg_data.get("username") or ""
+    password = cfg_data.get("password_plain") or ""
+
+    if cfg_data.get("use_ssl"):
+        with smtplib.SMTP_SSL(host, port, timeout=15) as s:
+            if not anonymous and username:
+                s.login(username, password)
+            s.send_message(msg)
+    else:
+        with smtplib.SMTP(host, port, timeout=15) as s:
+            if cfg_data.get("use_tls"):
+                s.starttls()
+            if not anonymous and username:
+                s.login(username, password)
+            s.send_message(msg)
+
+
+def _smtp_cfg_to_data(cfg: SmtpConfig) -> dict:
+    return {
+        "host": cfg.host,
+        "port": cfg.port,
+        "use_tls": cfg.use_tls,
+        "use_ssl": cfg.use_ssl,
+        "anonymous": cfg.anonymous,
+        "username": cfg.username,
+        "password_plain": decrypt_secret(cfg.password) if cfg.password else "",
+        "from_email": cfg.from_email,
+        "from_name": cfg.from_name,
+    }
+
+
+def _gather_notification_recipients(
+    db: Session, entry_level: str, exclude_username: str
+) -> list[str]:
+    """Return emails of active users whose max access level >= entry_level."""
+    if entry_level not in LEVEL_HIERARCHY:
+        target_idx = 0
+    else:
+        target_idx = LEVEL_HIERARCHY.index(entry_level)
+
+    users = db.scalars(select(User).where(User.is_active.is_(True))).all()
+    emails: list[str] = []
+    for u in users:
+        if u.username == exclude_username:
+            continue
+        if not u.email or "@" not in u.email:
+            continue
+        # Skip placeholder local emails that won't deliver
+        domain = u.email.rsplit("@", 1)[-1].lower()
+        if domain in {"local", "ldap.local", "ad.local"}:
+            continue
+        levels = _user_access_levels(db, u)
+        if not levels:
+            continue
+        max_idx = LEVEL_HIERARCHY.index(levels[-1])
+        if max_idx >= target_idx:
+            emails.append(u.email)
+    return emails
+
+
+def _notify_async(cfg_data: dict, recipients: list[str], subject: str, body: str) -> None:
+    """Fire-and-forget email delivery in a background thread."""
+    if not cfg_data or not recipients:
+        return
+    import threading
+    import logging as _logging
+
+    def _runner() -> None:
+        try:
+            _smtp_send(cfg_data, recipients, subject, body)
+        except Exception as exc:  # noqa: BLE001
+            _logging.warning("SMTP notification failed: %s", exc)
+
+    threading.Thread(target=_runner, daemon=True).start()
+
+
+def _notify_entry_event(
+    db: Session, entry: Entry, entry_type_code: str, actor_username: str, event: str
+) -> None:
+    """Email notification for entry create/update/delete, respecting role grid."""
+    cfg = _get_smtp_row(db)
+    if cfg is None or not cfg.enabled or not cfg.host:
+        return
+    flag = {
+        "created": cfg.notify_on_create,
+        "updated": cfg.notify_on_update,
+        "deleted": cfg.notify_on_delete,
+    }.get(event, False)
+    if not flag:
+        return
+    recipients = _gather_notification_recipients(db, entry.level, actor_username)
+    if not recipients:
+        return
+    level_label = {
+        "general": "General",
+        "domain_admin": "Domain Admin",
+        "enterprise_admin": "Enterprise Admin",
+    }.get(entry.level, entry.level)
+    subject = f"[SuckPasswords] Entry {event}: {entry.title} ({level_label})"
+    body = (
+        f"An entry was {event} in SuckPasswords.\n\n"
+        f"Title       : {entry.title}\n"
+        f"Type        : {entry_type_code}\n"
+        f"Access level: {level_label}\n"
+        f"Performed by: {actor_username}\n"
+        f"\nThis is an automated notification — passwords are not sent by email.\n"
+    )
+    _notify_async(_smtp_cfg_to_data(cfg), recipients, subject, body)
+
 
 
 def _build_ldap_server(server_url: str, use_ssl: bool, connect_timeout: int | None = None) -> Server:
@@ -255,6 +412,9 @@ def on_startup() -> None:
         conn.execute(text(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE DEFAULT NULL"
         ))
+        conn.execute(text(
+            "ALTER TABLE smtp_config ADD COLUMN IF NOT EXISTS anonymous BOOLEAN DEFAULT FALSE NOT NULL"
+        ))
         conn.commit()
 
     with Session(engine) as db:
@@ -318,6 +478,11 @@ def on_startup() -> None:
                 required_group_dn=settings.ad_required_group_dn,
             )
             db.add(ldap_row)
+
+        # Bootstrap SMTP config row (id=1) with defaults
+        smtp_row = db.scalar(select(SmtpConfig).where(SmtpConfig.id == 1))
+        if smtp_row is None:
+            db.add(SmtpConfig(id=1))
 
         db.commit()
 
@@ -432,6 +597,8 @@ def create_folder(payload: FolderCreate, db: Session = Depends(get_db), user: Us
 
     folder = Folder(name=payload.name.strip(), parent_id=payload.parent_id, icon=(payload.icon or "📁"))
     db.add(folder)
+    db.flush()
+    _log_action(db, user.username, "folder.create", "folder", folder.id, f"name={folder.name!r}")
     db.commit()
     db.refresh(folder)
     return FolderResponse(
@@ -470,9 +637,14 @@ def rename_folder(
     if folder.is_system:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="System folders cannot be renamed")
 
+    old_name = folder.name
     folder.name = payload.name.strip()
     if payload.icon is not None:
         folder.icon = payload.icon or "📁"
+    _log_action(
+        db, user.username, "folder.rename", "folder", folder.id,
+        f"{old_name!r} -> {folder.name!r}",
+    )
     db.commit()
     db.refresh(folder)
     return FolderResponse(
@@ -513,7 +685,12 @@ def move_folder(
                 detail="Folder cannot be moved into its descendant",
             )
 
+    old_parent = folder.parent_id
     folder.parent_id = payload.parent_id
+    _log_action(
+        db, user.username, "folder.move", "folder", folder.id,
+        f"parent {old_parent} -> {payload.parent_id}",
+    )
     db.commit()
     db.refresh(folder)
     return FolderResponse(
@@ -556,6 +733,10 @@ def delete_folder(
         for target in folders_to_delete:
             db.delete(target)
 
+        _log_action(
+            db, user.username, "folder.delete", "folder", folder_id,
+            f"recursive deleted={deleted_count} reassigned_entries={len(affected_entries)}",
+        )
         db.commit()
         return {
             "message": "Folder tree deleted",
@@ -571,7 +752,12 @@ def delete_folder(
     for entry in entries_in_folder:
         entry.folder_id = None
 
+    folder_name = folder.name
     db.delete(folder)
+    _log_action(
+        db, user.username, "folder.delete", "folder", folder_id,
+        f"name={folder_name!r} moved_children={len(children)} reassigned_entries={len(entries_in_folder)}",
+    )
     db.commit()
     return {
         "message": "Folder deleted and children moved to root",
@@ -609,8 +795,14 @@ def create_entry(payload: EntryCreate, db: Session = Depends(get_db), user: User
         created_by=user.username,
     )
     db.add(entry)
+    db.flush()
+    _log_action(
+        db, user.username, "entry.create", "entry", entry.id,
+        f"title={entry.title!r} type={entry_type.code} level={entry.level}",
+    )
     db.commit()
     db.refresh(entry)
+    _notify_entry_event(db, entry, entry_type.code, user.username, "created")
 
     return EntryResponse(
         id=entry.id,
@@ -706,8 +898,13 @@ def update_entry(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No access to this entry level")
         entry.level = payload.level
 
+    _log_action(
+        db, user.username, "entry.update", "entry", entry.id,
+        f"title={entry.title!r} type={entry_type.code} level={entry.level}",
+    )
     db.commit()
     db.refresh(entry)
+    _notify_entry_event(db, entry, entry_type.code, user.username, "updated")
     return EntryResponse(
         id=entry.id,
         folder_id=entry.folder_id,
@@ -735,8 +932,22 @@ def delete_entry(
     accessible_levels = _user_access_levels(db, user)
     if entry.level not in accessible_levels:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No access to this entry")
+    entry_type = db.scalar(select(EntryType).where(EntryType.id == entry.entry_type_id))
+    snapshot_title = entry.title
+    snapshot_level = entry.level
+    snapshot_type_code = entry_type.code if entry_type else ""
+    # Build a detached copy for notification (entry will be deleted before commit)
+    notify_entry = Entry(
+        title=snapshot_title, level=snapshot_level,
+        login="", password="", entry_type_id=entry.entry_type_id,
+    )
     db.delete(entry)
+    _log_action(
+        db, user.username, "entry.delete", "entry", entry_id,
+        f"title={snapshot_title!r} level={snapshot_level}",
+    )
     db.commit()
+    _notify_entry_event(db, notify_entry, snapshot_type_code, user.username, "deleted")
     return {"message": "Deleted"}
 
 
@@ -754,6 +965,7 @@ def create_role(payload: RoleCreate, db: Session = Depends(get_db), user: User =
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Role already exists")
 
     db.add(Role(name=payload.name, description=payload.description))
+    _log_action(db, user.username, "role.create", "role", payload.name, f"description={payload.description!r}")
     db.commit()
     return {"message": "Role created"}
 
@@ -827,6 +1039,10 @@ def upsert_permission(
         permission.can_read = payload.can_read
         permission.can_write = payload.can_write
 
+    _log_action(
+        db, user.username, "permission.upsert", "role", payload.role_name,
+        f"entry_type={payload.entry_type_code} read={payload.can_read} write={payload.can_write}",
+    )
     db.commit()
     return {"message": "Permission saved"}
 
@@ -847,6 +1063,10 @@ def assign_role(payload: RoleAssign, db: Session = Depends(get_db), user: User =
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Role already assigned to this user")
     db.add(UserRole(user_id=target_user.id, role_id=role.id))
+    _log_action(
+        db, user.username, "role.assign", "user", target_user.id,
+        f"username={target_user.username} role={payload.role_name}",
+    )
     db.commit()
     return {"message": "Role assigned"}
 
@@ -867,6 +1087,10 @@ def unassign_role(payload: RoleUnassign, db: Session = Depends(get_db), user: Us
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not assigned to this user")
     db.delete(existing)
+    _log_action(
+        db, user.username, "role.unassign", "user", target_user.id,
+        f"username={target_user.username} role={payload.role_name}",
+    )
     db.commit()
     return {"message": "Role removed"}
 
@@ -884,6 +1108,10 @@ def toggle_admin(
     if target.id == user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot change your own admin status")
     target.is_superuser = not target.is_superuser
+    _log_action(
+        db, user.username, "user.toggle_admin", "user", target.id,
+        f"username={target.username} is_superuser={target.is_superuser}",
+    )
     db.commit()
     return {"is_superuser": target.is_superuser}
 
@@ -943,6 +1171,10 @@ def save_ldap_config(
     cfg.required_group_dn = payload.required_group_dn
     cfg.auto_provision = payload.auto_provision
     cfg.default_role = payload.default_role
+    _log_action(
+        db, user.username, "ldap.save", "ldap", "",
+        f"enabled={cfg.enabled} server={cfg.server_url}",
+    )
     db.commit()
     return _ldap_row_to_response(cfg)
 
@@ -1056,6 +1288,128 @@ def sync_ldap_users(
         "skipped_no_username_attr": skipped_no_attr,
         "skipped_not_in_group": skipped_group,
     }
+
+
+# ── SMTP / Email notifications ─────────────────────────────────────────────────
+
+def _smtp_row_to_response(cfg: SmtpConfig) -> SmtpConfigResponse:
+    return SmtpConfigResponse(
+        enabled=cfg.enabled,
+        host=cfg.host,
+        port=cfg.port,
+        use_tls=cfg.use_tls,
+        use_ssl=cfg.use_ssl,
+        anonymous=cfg.anonymous,
+        username=cfg.username,
+        password_set=bool(cfg.password),
+        from_email=cfg.from_email,
+        from_name=cfg.from_name,
+        notify_on_create=cfg.notify_on_create,
+        notify_on_update=cfg.notify_on_update,
+        notify_on_delete=cfg.notify_on_delete,
+    )
+
+
+@app.get("/admin/smtp", response_model=SmtpConfigResponse)
+def get_smtp_config(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> SmtpConfigResponse:
+    _assert_admin(user)
+    cfg = _get_smtp_row(db)
+    if cfg is None:
+        cfg = SmtpConfig(id=1)
+        db.add(cfg)
+        db.commit()
+    return _smtp_row_to_response(cfg)
+
+
+@app.put("/admin/smtp", response_model=SmtpConfigResponse)
+def save_smtp_config(
+    payload: SmtpConfigSave,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> SmtpConfigResponse:
+    _assert_admin(user)
+    cfg = _get_smtp_row(db)
+    if cfg is None:
+        cfg = SmtpConfig(id=1)
+        db.add(cfg)
+
+    cfg.enabled = payload.enabled
+    cfg.host = payload.host.strip()
+    cfg.port = int(payload.port or 587)
+    cfg.use_tls = payload.use_tls
+    cfg.use_ssl = payload.use_ssl
+    cfg.anonymous = payload.anonymous
+    cfg.username = payload.username.strip()
+    if payload.password:                                # empty/None = keep existing
+        cfg.password = encrypt_secret(payload.password)
+    cfg.from_email = payload.from_email.strip()
+    cfg.from_name = payload.from_name.strip() or "SuckPasswords"
+    cfg.notify_on_create = payload.notify_on_create
+    cfg.notify_on_update = payload.notify_on_update
+    cfg.notify_on_delete = payload.notify_on_delete
+
+    _log_action(
+        db, user.username, "smtp.save", "smtp", "",
+        f"enabled={cfg.enabled} host={cfg.host}:{cfg.port} anonymous={cfg.anonymous}",
+    )
+    db.commit()
+    return _smtp_row_to_response(cfg)
+
+
+@app.post("/admin/smtp/test")
+def test_smtp(
+    payload: SmtpTestRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    _assert_admin(user)
+    cfg = _get_smtp_row(db)
+    if cfg is None or not cfg.host:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SMTP is not configured")
+    to_email = (payload.to_email or "").strip() or user.email
+    if not to_email or "@" not in to_email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Recipient email is invalid")
+    try:
+        _smtp_send(
+            _smtp_cfg_to_data(cfg),
+            [to_email],
+            "[SuckPasswords] SMTP test message",
+            "This is a test email from SuckPasswords. If you received it, SMTP is configured correctly.\n",
+        )
+    except Exception as exc:
+        import logging as _logging
+        _logging.exception("SMTP test failed: %s", exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    _log_action(db, user.username, "smtp.test", "smtp", "", f"to={to_email}")
+    db.commit()
+    return {"message": f"Test email sent to {to_email}"}
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+@app.get("/admin/logs", response_model=list[AuditLogResponse])
+def list_audit_logs(
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[AuditLogResponse]:
+    _assert_admin(user)
+    limit = max(1, min(int(limit or 200), 1000))
+    rows = db.scalars(
+        select(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit)
+    ).all()
+    return [
+        AuditLogResponse(
+            id=r.id,
+            created_at=r.created_at.isoformat() if r.created_at else "",
+            username=r.username,
+            action=r.action,
+            resource_type=r.resource_type,
+            resource_id=r.resource_id,
+            details=r.details,
+        )
+        for r in rows
+    ]
 
 
 # ── Backup / Restore helpers ─────────────────────────────────────────────────
@@ -1179,6 +1533,8 @@ def create_backup(
         "entries": rows,
     }, ensure_ascii=False).encode("utf-8")
     encrypted = _backup_encrypt(payload, password)
+    _log_action(db, user.username, "backup.create", "backup", "", f"entries={len(rows)}")
+    db.commit()
     return StreamingResponse(
         io.BytesIO(encrypted),
         media_type="application/octet-stream",
@@ -1207,6 +1563,10 @@ async def restore_backup(
         db.delete(e)
     db.flush()
     imported, skipped = _import_rows(db, rows)
+    _log_action(
+        db, user.username, "backup.restore", "backup", "",
+        f"imported={imported} skipped={skipped}",
+    )
     db.commit()
     return {"message": "Restore complete", "imported": imported, "skipped": skipped}
 
@@ -1258,6 +1618,10 @@ async def import_csv(
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid CSV: {exc}")
     imported, skipped = _import_rows(db, rows)
+    _log_action(
+        db, user.username, "csv.import", "entry", "",
+        f"imported={imported} skipped={skipped}",
+    )
     db.commit()
     return {"message": "Import complete", "imported": imported, "skipped": skipped}
 

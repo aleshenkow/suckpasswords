@@ -1,9 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class User(Base):
@@ -113,3 +117,38 @@ class LdapConfig(Base):
     required_group_dn: Mapped[str] = mapped_column(String(512), default="")
     auto_provision: Mapped[bool] = mapped_column(Boolean, default=True)
     default_role: Mapped[str] = mapped_column(String(128), default="")
+
+
+class SmtpConfig(Base):
+    """Single-row table (id=1) that stores SMTP / email-notification settings."""
+    __tablename__ = "smtp_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    host: Mapped[str] = mapped_column(String(255), default="")
+    port: Mapped[int] = mapped_column(Integer, default=587)
+    use_tls: Mapped[bool] = mapped_column(Boolean, default=True)
+    use_ssl: Mapped[bool] = mapped_column(Boolean, default=False)
+    anonymous: Mapped[bool] = mapped_column(Boolean, default=False)
+    username: Mapped[str] = mapped_column(String(255), default="")
+    password: Mapped[str] = mapped_column(Text, default="")  # AES-encrypted
+    from_email: Mapped[str] = mapped_column(String(255), default="")
+    from_name: Mapped[str] = mapped_column(String(255), default="SuckPasswords")
+    notify_on_create: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_on_update: Mapped[bool] = mapped_column(Boolean, default=False)
+    notify_on_delete: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, index=True
+    )
+    username: Mapped[str] = mapped_column(String(128), default="", index=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    resource_type: Mapped[str] = mapped_column(String(64), default="")
+    resource_id: Mapped[str] = mapped_column(String(64), default="")
+    details: Mapped[str] = mapped_column(Text, default="")
+

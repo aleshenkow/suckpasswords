@@ -575,9 +575,11 @@
       <!-- Admin sub-nav -->
       <div style="padding:10px 28px 0;flex-shrink:0;border-bottom:1px solid var(--line);display:flex;gap:4px">
         <button class="sidebar-nav-item active" id="adminNavLdap" onclick="switchAdmin('ldap')" style="width:auto;padding:8px 16px">&#128279; LDAP / AD</button>
+        <button class="sidebar-nav-item" id="adminNavSmtp" onclick="switchAdmin('smtp')" style="width:auto;padding:8px 16px">&#128231; SMTP</button>
         <button class="sidebar-nav-item" id="adminNavUsers" onclick="switchAdmin('users')" style="width:auto;padding:8px 16px">&#128101; Users</button>
         <button class="sidebar-nav-item" id="adminNavBackup" onclick="switchAdmin('backup')" style="width:auto;padding:8px 16px">&#128190; Backup</button>
         <button class="sidebar-nav-item" id="adminNavImport" onclick="switchAdmin('import')" style="width:auto;padding:8px 16px">&#128257; Import / Export</button>
+        <button class="sidebar-nav-item" id="adminNavLogs" onclick="switchAdmin('logs')" style="width:auto;padding:8px 16px">&#128221; Logs</button>
       </div>
       <div style="flex:1;overflow-y:auto;padding:20px 28px 28px">
 
@@ -671,6 +673,61 @@
           </div>
         </div>
 
+        <!-- ── SMTP TAB ── -->
+        <div id="adminTabSmtp" class="hidden">
+          <div class="admin-card">
+            <div class="admin-card-title" style="justify-content:space-between">
+              <span>&#128231; SMTP / Email notifications</span>
+              <div class="checkbox-row" style="background:none;padding:0;gap:6px">
+                <input type="checkbox" id="smtpEnabled" style="width:16px;height:16px;accent-color:var(--green)"/>
+                <label for="smtpEnabled" style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink)">Enabled</label>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
+              <div>
+                <label for="smtpHost">SMTP host</label>
+                <input class="field" id="smtpHost" placeholder="smtp.example.com"/>
+                <label for="smtpPort">Port</label>
+                <input class="field" id="smtpPort" type="number" min="1" max="65535" placeholder="587"/>
+                <div class="checkbox-row" style="margin:8px 0 6px"><input type="checkbox" id="smtpAnonymous"/><label for="smtpAnonymous">Anonymous SMTP (no authentication)</label></div>
+                <label for="smtpUsername">Username</label>
+                <input class="field" id="smtpUsername" placeholder="user@example.com"/>
+                <label for="smtpPassword">Password</label>
+                <div class="pw-wrap">
+                  <input class="field" id="smtpPassword" type="password" placeholder="&#8226;&#8226;&#8226; leave empty to keep current &#8226;&#8226;&#8226;"/>
+                  <button class="pw-eye" type="button" onclick="const f=document.getElementById('smtpPassword');f.type=f.type==='password'?'text':'password'">&#128065;</button>
+                </div>
+              </div>
+              <div>
+                <label for="smtpFromEmail">From email</label>
+                <input class="field" id="smtpFromEmail" placeholder="vault@example.com"/>
+                <label for="smtpFromName">From name</label>
+                <input class="field" id="smtpFromName" placeholder="SuckPasswords"/>
+                <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
+                  <div class="checkbox-row" style="flex:1;min-width:140px"><input type="checkbox" id="smtpUseTls"/><label for="smtpUseTls">STARTTLS</label></div>
+                  <div class="checkbox-row" style="flex:1;min-width:140px"><input type="checkbox" id="smtpUseSsl"/><label for="smtpUseSsl">SSL/TLS (implicit)</label></div>
+                </div>
+                <div style="margin-top:8px;padding:10px;background:var(--card2);border:1px solid var(--line);border-radius:8px">
+                  <div style="font-size:12px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;font-weight:700">Notify on entry</div>
+                  <div class="checkbox-row" style="margin-bottom:4px"><input type="checkbox" id="smtpNotifyCreate"/><label for="smtpNotifyCreate">Created</label></div>
+                  <div class="checkbox-row" style="margin-bottom:4px"><input type="checkbox" id="smtpNotifyUpdate"/><label for="smtpNotifyUpdate">Updated</label></div>
+                  <div class="checkbox-row"><input type="checkbox" id="smtpNotifyDelete"/><label for="smtpNotifyDelete">Deleted</label></div>
+                </div>
+              </div>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin:14px 0 0">
+              Notifications respect role hierarchy &mdash; a user only receives email about an entry if their role grants access to that entry's level.
+              For example, <strong>General</strong> users will not be notified about <strong>Enterprise Admin</strong> entries.
+            </p>
+            <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center">
+              <button class="btn btn-main" id="saveSmtpBtn">&#128190; Save</button>
+              <input class="field" id="smtpTestTo" placeholder="recipient@example.com (optional)" style="flex:1;min-width:220px;margin:0"/>
+              <button class="btn btn-secondary" id="testSmtpBtn">&#128231; Send test email</button>
+            </div>
+            <div class="msg" id="smtpMsg"></div>
+          </div>
+        </div>
+
         <!-- ── USERS TAB ── -->
         <div id="adminTabUsers" class="hidden">
           <div class="admin-card">
@@ -735,6 +792,29 @@
               <button class="btn btn-main" style="margin-top:12px" id="importCsvBtn">&#128228; Import</button>
               <div class="msg" id="importMsg"></div>
             </div>
+          </div>
+        </div>
+
+        <!-- ── LOGS TAB ── -->
+        <div id="adminTabLogs" class="hidden">
+          <div class="admin-card">
+            <div class="admin-card-title" style="justify-content:space-between">
+              <span>&#128221; Audit log</span>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input class="field" id="logsFilter" placeholder="Filter (user / action / details)" style="margin:0;padding:6px 10px;font-size:12px;width:220px"/>
+                <button class="btn btn-ghost btn-sm" id="refreshLogsBtn">Refresh</button>
+              </div>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin:0 0 12px">
+              Showing the most recent 200 events. Records all changes made by users.
+            </p>
+            <div class="tbl-wrap" style="max-height:560px">
+              <table class="admin-table">
+                <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Resource</th><th>Details</th></tr></thead>
+                <tbody id="logsTableBody"></tbody>
+              </table>
+            </div>
+            <div class="msg" id="logsMsg"></div>
           </div>
         </div>
 
@@ -962,11 +1042,13 @@ function switchTab(tab) {
 }
 
 function switchAdmin(sub) {
-  ['ldap','users','backup','import'].forEach(s=>{
+  ['ldap','smtp','users','backup','import','logs'].forEach(s=>{
     $('adminTab'+s[0].toUpperCase()+s.slice(1)).classList.toggle('hidden', s!==sub);
     $('adminNav'+s[0].toUpperCase()+s.slice(1)).classList.toggle('active', s===sub);
   });
   if (sub==='users') loadAdminUsers();
+  else if (sub==='smtp') loadSmtpConfig();
+  else if (sub==='logs') loadAuditLogs();
 }
 
 async function api(path, opts={}) {
@@ -1627,6 +1709,105 @@ $('importCsvBtn').addEventListener('click',async()=>{
     await loadEntries();
   }catch(e){setMsg('importMsg',e.message,true);}
 });
+
+// ── SMTP ──────────────────────────────────────────────────────────
+async function loadSmtpConfig() {
+  try {
+    const c = await api('/admin/smtp');
+    $('smtpEnabled').checked         = c.enabled;
+    $('smtpHost').value              = c.host;
+    $('smtpPort').value              = c.port;
+    $('smtpUseTls').checked          = c.use_tls;
+    $('smtpUseSsl').checked          = c.use_ssl;
+    $('smtpAnonymous').checked       = !!c.anonymous;
+    $('smtpUsername').value          = c.username;
+    $('smtpPassword').value          = '';
+    $('smtpPassword').placeholder    = c.password_set ? '••• password saved — leave blank to keep •••' : '••• enter SMTP password •••';
+    $('smtpFromEmail').value         = c.from_email;
+    $('smtpFromName').value          = c.from_name;
+    $('smtpNotifyCreate').checked    = c.notify_on_create;
+    $('smtpNotifyUpdate').checked    = c.notify_on_update;
+    $('smtpNotifyDelete').checked    = c.notify_on_delete;
+    setSmtpAuthFieldsState();
+  } catch {}
+}
+
+function setSmtpAuthFieldsState() {
+  const disabled = $('smtpAnonymous').checked;
+  $('smtpUsername').disabled = disabled;
+  $('smtpPassword').disabled = disabled;
+  if (disabled) {
+    $('smtpPassword').value = '';
+  }
+}
+
+$('saveSmtpBtn')?.addEventListener('click',async()=>{
+  const body={
+    enabled:$('smtpEnabled').checked,
+    host:$('smtpHost').value.trim(),
+    port:Number($('smtpPort').value)||587,
+    use_tls:$('smtpUseTls').checked,
+    use_ssl:$('smtpUseSsl').checked,
+    anonymous:$('smtpAnonymous').checked,
+    username:$('smtpUsername').value.trim(),
+    password:$('smtpPassword').value||null,
+    from_email:$('smtpFromEmail').value.trim(),
+    from_name:$('smtpFromName').value.trim()||'SuckPasswords',
+    notify_on_create:$('smtpNotifyCreate').checked,
+    notify_on_update:$('smtpNotifyUpdate').checked,
+    notify_on_delete:$('smtpNotifyDelete').checked,
+  };
+  try{await api('/admin/smtp',{method:'PUT',body:JSON.stringify(body)});setMsg('smtpMsg','Saved!');await loadSmtpConfig();}
+  catch(e){setMsg('smtpMsg',e.message,true);}
+});
+$('testSmtpBtn')?.addEventListener('click',async()=>{
+  setMsg('smtpMsg','Sending test email\u2026');
+  try{
+    const d=await api('/admin/smtp/test',{method:'POST',body:JSON.stringify({to_email:$('smtpTestTo').value.trim()})});
+    setMsg('smtpMsg','\u2705 '+d.message);
+  } catch(e){setMsg('smtpMsg','\u274c '+e.message,true);}
+});
+
+// ── Audit logs ────────────────────────────────────────────────────
+let _logsCache = [];
+async function loadAuditLogs() {
+  try {
+    setMsg('logsMsg','Loading\u2026');
+    _logsCache = await api('/admin/logs?limit=200');
+    renderAuditLogs();
+    setMsg('logsMsg','');
+
+$('smtpAnonymous')?.addEventListener('change',setSmtpAuthFieldsState);
+  } catch(e){ setMsg('logsMsg',e.message,true); }
+}
+function renderAuditLogs() {
+  const tb=$('logsTableBody'); tb.innerHTML='';
+  const q=($('logsFilter').value||'').trim().toLowerCase();
+  const rows=q
+    ? _logsCache.filter(r=>(r.username+' '+r.action+' '+r.resource_type+' '+r.resource_id+' '+r.details).toLowerCase().includes(q))
+    : _logsCache;
+  if (!rows.length) {
+    tb.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No log entries</td></tr>';
+    return;
+  }
+  for (const r of rows) {
+    const tr=document.createElement('tr');
+    let ts=r.created_at||'';
+    try { ts = new Date(r.created_at).toLocaleString(); } catch {}
+    const resource = r.resource_type
+      ? esc(r.resource_type)+(r.resource_id?(' #'+esc(r.resource_id)):'')
+      : '';
+    tr.innerHTML =
+      '<td style="white-space:nowrap;font-size:12px;color:var(--muted)">'+esc(ts)+'</td>'
+      +'<td>'+esc(r.username||'-')+'</td>'
+      +'<td><span class="badge">'+esc(r.action)+'</span></td>'
+      +'<td>'+resource+'</td>'
+      +'<td style="font-size:12px;color:var(--muted)">'+esc(r.details||'')+'</td>';
+    tb.appendChild(tr);
+  }
+}
+$('refreshLogsBtn')?.addEventListener('click',loadAuditLogs);
+$('logsFilter')?.addEventListener('input',renderAuditLogs);
 
 $('saveLdapBtn').addEventListener('click',async()=>{
   const body={
