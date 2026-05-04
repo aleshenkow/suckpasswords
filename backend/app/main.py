@@ -4,7 +4,13 @@ from urllib.parse import urlparse
 import csv as csv_module
 import io
 import json
+import logging
 import os
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -208,38 +214,37 @@ def _gather_notification_recipients(
     db: Session, entry_level: str, exclude_username: str
 ) -> list[str]:
     """Return emails of active users whose max access level >= entry_level."""
-    import logging as _logging
     if entry_level not in LEVEL_HIERARCHY:
         target_idx = 0
     else:
         target_idx = LEVEL_HIERARCHY.index(entry_level)
 
     users = db.scalars(select(User).where(User.is_active.is_(True))).all()
-    _logging.info("SMTP recipients: checking %d active user(s) for level=%s", len(users), entry_level)
+    logging.info("SMTP recipients: checking %d active user(s) for level=%s", len(users), entry_level)
     emails: list[str] = []
     for u in users:
         if u.username == exclude_username:
-            _logging.info("  skip %s — is actor (excluded)", u.username)
+            logging.info("  skip %s — is actor (excluded)", u.username)
             continue
         if not u.email or "@" not in u.email:
-            _logging.info("  skip %s — no valid email (email=%r)", u.username, u.email)
+            logging.info("  skip %s — no valid email (email=%r)", u.username, u.email)
             continue
         # Skip placeholder local emails that won't deliver
         domain = u.email.rsplit("@", 1)[-1].lower()
         if domain in {"local", "ldap.local", "ad.local"}:
-            _logging.info("  skip %s — placeholder domain (%s)", u.username, domain)
+            logging.info("  skip %s — placeholder domain (%s)", u.username, domain)
             continue
         levels = _user_access_levels(db, u)
         if not levels:
-            _logging.info("  skip %s — no roles assigned", u.username)
+            logging.info("  skip %s — no roles assigned", u.username)
             continue
         max_idx = LEVEL_HIERARCHY.index(levels[-1])
         if max_idx >= target_idx:
-            _logging.info("  include %s <%s> (max_level=%s)", u.username, u.email, levels[-1])
+            logging.info("  include %s <%s> (max_level=%s)", u.username, u.email, levels[-1])
             emails.append(u.email)
         else:
-            _logging.info("  skip %s — insufficient level (max=%s, required=%s)", u.username, levels[-1], entry_level)
-    _logging.info("SMTP recipients result: %s", emails or "(none)")
+            logging.info("  skip %s — insufficient level (max=%s, required=%s)", u.username, levels[-1], entry_level)
+    logging.info("SMTP recipients result: %s", emails or "(none)")
     return emails
 
 
@@ -248,15 +253,14 @@ def _notify_async(cfg_data: dict, recipients: list[str], subject: str, body: str
     if not cfg_data or not recipients:
         return
     import threading
-    import logging as _logging
 
     def _runner() -> None:
         try:
-            _logging.info("SMTP sending '%s' to %s via %s:%s", subject, recipients, cfg_data.get('host'), cfg_data.get('port'))
+            logging.info("SMTP sending '%s' to %s via %s:%s", subject, recipients, cfg_data.get('host'), cfg_data.get('port'))
             _smtp_send(cfg_data, recipients, subject, body)
-            _logging.info("SMTP send OK -> %s", recipients)
+            logging.info("SMTP send OK -> %s", recipients)
         except Exception as exc:  # noqa: BLE001
-            _logging.warning("SMTP notification failed: %s", exc)
+            logging.warning("SMTP notification failed: %s", exc)
 
     threading.Thread(target=_runner, daemon=True).start()
 
@@ -265,10 +269,9 @@ def _notify_entry_event(
     db: Session, entry: Entry, entry_type_code: str, actor_username: str, event: str
 ) -> None:
     """Email notification for entry create/update/delete, respecting role grid."""
-    import logging as _logging
     cfg = _get_smtp_row(db)
     if cfg is None or not cfg.enabled or not cfg.host:
-        _logging.info("SMTP notify skip [%s]: SMTP not configured or disabled", event)
+        logging.info("SMTP notify skip [%s]: SMTP not configured or disabled", event)
         return
     flag = {
         "created": cfg.notify_on_create,
@@ -276,17 +279,17 @@ def _notify_entry_event(
         "deleted": cfg.notify_on_delete,
     }.get(event, False)
     if not flag:
-        _logging.info("SMTP notify skip [%s]: notify_%s flag is off", event, event)
+        logging.info("SMTP notify skip [%s]: notify_%s flag is off", event, event)
         return
     recipients = _gather_notification_recipients(db, entry.level, actor_username)
     if not recipients:
-        _logging.warning(
+        logging.warning(
             "SMTP notify skip [%s]: no recipients for entry '%s' (level=%s, actor=%s). "
             "Check that other users have valid emails and appropriate roles.",
             event, entry.title, entry.level, actor_username,
         )
         return
-    _logging.info("SMTP notify [%s]: sending to %s", event, recipients)
+    logging.info("SMTP notify [%s]: sending to %s", event, recipients)
     level_label = {
         "general": "General",
         "domain_admin": "Domain Admin",
