@@ -268,6 +268,8 @@
     .type-badge.api{background:#1a1030;color:#c07aff;border-color:#2a1650}
     .td-actions{display:flex;gap:2px;align-items:center;opacity:0;transition:opacity .12s}
     tr:hover .td-actions{opacity:1}
+    .td-field-row{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+    .td-field-row .td-actions{flex-shrink:0;margin-left:auto}
     .dash{color:var(--muted)}
 
     /* ═══════════════ ADMIN TAB ═══════════════ */
@@ -960,7 +962,8 @@
         </div>
       </div>
       <div style="font-size:24px;font-weight:800;letter-spacing:-.3px;margin-bottom:4px">SuckPasswords</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:24px;letter-spacing:.3px">Corporate Password Vault</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px;letter-spacing:.3px">Corporate Password Vault</div>
+      <div style="display:inline-flex;align-items:center;gap:6px;background:var(--sel-bg);color:var(--sel-text);font-size:12px;font-weight:700;padding:3px 12px;border-radius:99px;margin-bottom:20px;letter-spacing:.4px">v1.1</div>
       <div style="background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:16px 20px;text-align:left;font-size:13px;line-height:1.7;color:var(--ink)">
         This app was built on the fly to store your <em style="color:var(--accent)">suck passwords</em> for the whole team of amateurs.<br>
         Because apparently, sticky notes and Excel sheets weren't cutting it anymore.
@@ -1269,8 +1272,8 @@ function renderEntries() {
       +'<div><div class="td-name">'+esc(e.title)+'</div>'
       +'</div></div></td>'
       +'<td><span class="'+bCls+'">'+esc(e.entry_type_code)+'</span></td>'
-      +'<td class="td-login">'+(e.login?esc(e.login):'<span class="dash">—</span>')+'</td>'
-      +'<td class="td-pw"><span class="pw-mask" id="pwm_'+e.id+'">&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;</span></td>'
+      +'<td class="td-login"><div class="td-field-row">'+(e.login?'<span>'+esc(e.login)+'</span>':'<span class="dash">—</span>')+'<div class="td-actions" id="lba_'+e.id+'"></div></div></td>'
+      +'<td class="td-pw"><div class="td-field-row"><span class="pw-mask" id="pwm_'+e.id+'">&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;</span><div class="td-actions" id="pba_'+e.id+'"></div></div></td>'
       +'<td class="td-url">'+(e.url?'<a href="'+esc(e.url)+'" target="_blank" rel="noreferrer" style="color:var(--accent);text-decoration:none">'+esc(e.url)+'</a>':'<span class="dash">—</span>')+'</td>'
       +'<td><div class="td-actions" id="tda_'+e.id+'"></div></td>';
 
@@ -1286,16 +1289,12 @@ function renderEntries() {
 
     // Wire action buttons after DOM insert
     const acts=$('tda_'+e.id);
+    const lbts=$('lba_'+e.id);
+    const pbts=$('pba_'+e.id);
     const mkB=(title,ic,fn)=>{ const b=document.createElement('button'); b.className='btn-icon'; b.title=title; b.textContent=ic; b.addEventListener('click',fn); return b; };
-    if (e.login) acts.append(mkB('Copy login','📋',()=>navigator.clipboard.writeText(e.login)));
+    if (e.login) lbts.append(mkB('Copy login','📋',()=>navigator.clipboard.writeText(e.login)));
     if (plain) {
-      acts.append(
-        mkB('Show/hide','👁️',()=>{
-          const el=$('pwm_'+e.id);
-          pwState=!pwState;
-          el.textContent=pwState?plain:'•••••••••';
-          el.style.letterSpacing=pwState?'0':'3px';
-        }),
+      pbts.append(
         mkB('Copy password','🔐',()=>navigator.clipboard.writeText(plain))
       );
     }
