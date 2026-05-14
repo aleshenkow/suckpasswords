@@ -430,6 +430,17 @@
       pointer-events:none;z-index:9999;white-space:nowrap;
     }
     #suckToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    /* ── Copy toast ── */
+    #copyToast{
+      position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(20px);
+      background:#1e2235;border:1px solid var(--green);border-radius:12px;
+      color:var(--green);font-size:14px;font-weight:600;letter-spacing:0.01em;
+      padding:12px 24px;box-shadow:0 8px 32px rgba(0,0,0,0.5);
+      opacity:0;transition:opacity 0.3s ease,transform 0.3s ease;
+      pointer-events:none;z-index:9999;white-space:nowrap;
+    }
+    #copyToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    [data-theme="light"] #copyToast{background:#f0fdf4;}
   </style>
 </head>
 <body>
@@ -439,6 +450,7 @@
   <button id="idleStayBtn">Stay logged in</button>
 </div>
 <div id="suckToast">🤦 Your password completely suck dude</div>
+<div id="copyToast"></div>
 
 <!-- ═══ LOGIN SCREEN ═══ -->
 <div class="login-screen" id="loginScreen">
@@ -1292,10 +1304,10 @@ function renderEntries() {
     const lbts=$('lba_'+e.id);
     const pbts=$('pba_'+e.id);
     const mkB=(title,ic,fn)=>{ const b=document.createElement('button'); b.className='btn-icon'; b.title=title; b.textContent=ic; b.addEventListener('click',fn); return b; };
-    if (e.login) lbts.append(mkB('Copy login','📋',()=>navigator.clipboard.writeText(e.login)));
+    if (e.login) lbts.append(mkB('Copy login','📋',()=>{ navigator.clipboard.writeText(e.login); showCopyToast('Login'); }));
     if (plain) {
       pbts.append(
-        mkB('Copy password','🔐',()=>navigator.clipboard.writeText(plain))
+        mkB('Copy password','🔐',()=>{ navigator.clipboard.writeText(plain); showCopyToast('Password'); })
       );
     }
     acts.append(mkB('Edit','✏️',()=>openEntryModal(e)));
@@ -1343,6 +1355,14 @@ function isWeakPassword(pw) {
   if (!(/[0-9]/.test(pw))) return true;           // no digit
   if (!(/[^a-zA-Z0-9]/.test(pw))) return true;   // no special char
   return false;
+}
+let _copyTimer = null;
+function showCopyToast(label) {
+  const t = $('copyToast');
+  t.textContent = '✅ ' + label + ' copied';
+  t.classList.add('show');
+  if (_copyTimer) clearTimeout(_copyTimer);
+  _copyTimer = setTimeout(()=>t.classList.remove('show'), 2000);
 }
 let _suckTimer = null;
 function showSuckToast() {
