@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     app_secret_key: str = "change_me"
     app_data_encryption_key: str = ""
     app_access_token_expire_minutes: int = 30
+    app_remember_me_expire_minutes: int = 480
 
     app_admin_username: str = ""
     app_admin_password: str = ""

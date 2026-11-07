@@ -11,6 +11,7 @@ class TokenResponse(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+    remember_me: bool = False
 
 
 class FolderCreate(BaseModel):

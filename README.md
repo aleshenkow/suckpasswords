@@ -13,7 +13,8 @@ A self-hosted corporate password vault with a web UI, LDAP/AD authentication, ro
 - **AES-256-GCM** encryption for stored secrets
 - **Encrypted backup / restore** (`.spbackup` files)
 - **CSV import / export**
-- **Inactivity auto-logout** after 5 minutes
+- **Inactivity auto-logout** after 5 minutes (disabled for "Remember me" sessions)
+- **Remember me** option on login — keeps the session for 8 hours (`APP_REMEMBER_ME_EXPIRE_MINUTES`)
 - **Account lockout** after 5 failed login attempts (unlocks after 15 min)
 - **Brute-force rate limiting** on the login endpoint (nginx)
 - Dark / light theme
@@ -89,6 +90,15 @@ APP_ADMIN_EMAIL=admin@local       # optional
 > If `APP_ADMIN_USERNAME` or `APP_ADMIN_PASSWORD` is empty and no admin user exists yet, the application will refuse to start with a clear error message.
 
 Once the account is created the env variables are no longer used for login — you can clear them from `.env` if you prefer.
+
+## Session lifetime
+
+| Variable | Default | Description |
+|---|---|---|
+| `APP_ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Token lifetime for a normal login |
+| `APP_REMEMBER_ME_EXPIRE_MINUTES` | `480` | Token lifetime when "Remember me" is checked (8 h) |
+
+With "Remember me" checked, the session survives page reloads and is not logged out by the 5-minute inactivity timer.
 
 ## LDAP / Active Directory
 

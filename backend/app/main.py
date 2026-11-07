@@ -593,7 +593,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         user.locked_until = None
         db.commit()
 
-    token = create_access_token(payload.username)
+    if payload.remember_me:
+        token = create_access_token(payload.username, settings.app_remember_me_expire_minutes)
+    else:
+        token = create_access_token(payload.username)
     return TokenResponse(access_token=token)
 
 

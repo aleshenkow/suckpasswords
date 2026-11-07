@@ -470,6 +470,7 @@
       <input class="field" id="loginPassword" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
       <button class="pw-eye" id="loginPwEye" type="button">&#128065;</button>
     </div>
+    <div class="checkbox-row" style="margin-top:14px"><input type="checkbox" id="loginRemember"/><label for="loginRemember" style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink)">Remember me for 8 hours</label></div>
     <button class="btn btn-accent btn-full" style="margin-top:20px" id="loginBtn">Sign in</button>
     <div class="msg" id="loginMsg"></div>
   </div>
@@ -1071,6 +1072,11 @@ async function api(path, opts={}) {
   if (state.token) h.Authorization='Bearer '+state.token;
   const res=await fetch(path,{...opts,headers:h});
   const data=await res.json().catch(()=>({}));
+  if (res.status===401 && state.token && path!=='/auth/login') {
+    logout();
+    setMsg('loginMsg','Session expired — please sign in again',true);
+    throw new Error('Session expired');
+  }
   if (!res.ok) throw new Error(data.detail||'Request failed');
   return data;
 }
@@ -1525,14 +1531,18 @@ async function loadEntries() { state.entries=await api('/entries'); renderFolder
 // ── Auth ──────────────────────────────────────────────────────────
 async function login() {
   const username=$('loginUsername').value.trim(), password=$('loginPassword').value;
+  const remember=$('loginRemember').checked;
   if (!username||!password){setMsg('loginMsg','Enter username and password',true);return;}
   try {
-    const d=await api('/auth/login',{method:'POST',body:JSON.stringify({username,password}),headers:{}});
-    state.token=d.access_token; localStorage.setItem('sp_token',state.token); await bootstrapApp();
+    const d=await api('/auth/login',{method:'POST',body:JSON.stringify({username,password,remember_me:remember}),headers:{}});
+    state.token=d.access_token; localStorage.setItem('sp_token',state.token);
+    localStorage.setItem('sp_remember', remember ? 'true' : 'false');
+    await bootstrapApp();
   } catch(e){setMsg('loginMsg',e.message,true);}
 }
 
 async function bootstrapApp() {
+  $('loginRemember').checked = localStorage.getItem('sp_remember') === 'true';
   if (!state.token) return;
   try {
     state.user=await api('/users/me');
@@ -1549,7 +1559,8 @@ async function bootstrapApp() {
     buildSimpleIconPicker('createFolderIconPickerGrid', ic=>{ selectCreateFolderIcon(ic); $('createFolderIconPickerGrid').classList.add('hidden'); });
     buildSimpleIconPicker('renameFolderIconPickerGrid', ic=>{ selectRenameFolderIcon(ic); $('renameFolderIconPickerGrid').classList.add('hidden'); });
     await Promise.all([loadFolders(),loadEntries()]);
-    startIdleTracking();
+    // Remember-me sessions (24h token) are not subject to the 5-minute idle logout
+    if (localStorage.getItem('sp_remember') !== 'true') startIdleTracking();
   } catch(e) {
     localStorage.removeItem('sp_token'); state.token='';
     $('loginScreen').classList.remove('hidden'); $('appShell').classList.add('hidden');
@@ -1560,6 +1571,7 @@ async function bootstrapApp() {
 function logout() {
   stopIdleTracking();
   localStorage.removeItem('sp_token');
+  localStorage.removeItem('sp_remember');
   Object.assign(state,{token:'',user:null,folders:[],entries:[],roles:[],users:[],selectedFolderId:null});
   $('loginScreen').classList.remove('hidden'); $('appShell').classList.add('hidden');
   $('navAdmin').classList.add('hidden'); $('loginPassword').value=''; setMsg('loginMsg','');
