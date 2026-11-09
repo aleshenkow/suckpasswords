@@ -8,22 +8,42 @@ A self-hosted corporate password vault with a web UI, LDAP/AD authentication, ro
 - **LDAP / Active Directory** auth with group membership check and auto-provisioning
 - **3-tier RBAC** — General, DomainAdmin, EnterpriseAdmin entry levels
 - **Folder tree** with drag-and-drop organisation
-- **Entry types** — Password, SSH, API token
+- **Entry types** — Password, SSH, API token, with quick filter chips
+- **Two vault layouts** — dense *Table* and *Split* (entry list + details panel); the choice is remembered per browser
+- **Audited password reveal** — passwords are never sent in entry lists; showing or copying one goes through a dedicated endpoint and is written to the audit log
 - **Password generator** and weak-password detection
-- **AES-256-GCM** encryption for stored secrets
+- **AES-256-GCM** encryption for stored secrets (versioned scrypt-derived keys, legacy entries are re-encrypted automatically)
 - **Encrypted backup / restore** (`.spbackup` files)
 - **CSV import / export**
 - **Inactivity auto-logout** after 5 minutes (disabled for "Remember me" sessions)
 - **Remember me** option on login — keeps the session for 8 hours (`APP_REMEMBER_ME_EXPIRE_MINUTES`)
 - **Account lockout** after 5 failed login attempts (unlocks after 15 min)
 - **Brute-force rate limiting** on the login endpoint (nginx)
-- Dark / light theme
+- **Audit log** of logins (success and failure) and password reveals
+- **Daily database backups** — `pg_dump` kept for 14 days in `./backups`
+- Dark / light theme, line-icon UI, `Ctrl/Cmd+K` to focus search
 
 ## Screenshots
 
-| Login | Main Vault |
+Screenshots use generated demo data (no real credentials).
+
+**Login**
+
+![Login](docks/images/SuckLogin.png)
+
+**Vault — Table layout, dark theme**
+
+![Vault, table layout, dark theme](docks/images/SuckMain.png)
+
+**Vault — Split layout (list + details)**
+
+| Dark | Light |
 |---|---|
-| ![SuckPasswords Login](docks/images/SuckLogin.png) | ![SuckPasswords Main Dashboard](docks/images/SuckMain.png) |
+| ![Split layout, dark](docks/images/SuckSplitDark.png) | ![Split layout, light](docks/images/SuckSplitLight.png) |
+
+**Vault — Table layout, light theme**
+
+![Vault, table layout, light theme](docks/images/SuckTableLight.png)
 
 ## Architecture
 
@@ -32,8 +52,9 @@ Browser → nginx :443 (HTTPS) → FastAPI :8000 → PostgreSQL
 ```
 
 - **nginx** — TLS termination, security headers, rate limiting
-- **backend** — FastAPI + SQLAlchemy 2.0, JWT auth, bcrypt passwords
+- **backend** — FastAPI + SQLAlchemy 2.0, JWT (PyJWT) auth, bcrypt passwords, Alembic migrations; runs as a non-root user with a read-only filesystem and a healthcheck
 - **db** — PostgreSQL 16
+- **db-backup** — daily `pg_dump` (custom format) with 14-day retention
 
 ## Quick Start
 
@@ -55,7 +76,7 @@ Edit `.env` and set strong values for at minimum:
 | Variable | Description |
 |---|---|
 | `POSTGRES_PASSWORD` | PostgreSQL password |
-| `APP_SECRET_KEY` | JWT signing key (32+ random chars) |
+| `APP_SECRET_KEY` | JWT signing key (32+ random chars); the app refuses to start with the default value |
 | `APP_DATA_ENCRYPTION_KEY` | Entry encryption key (32+ random chars) |
 | `APP_ADMIN_PASSWORD` | Initial admin password |
 
@@ -73,7 +94,7 @@ For production, replace `certs/server.crt` and `certs/server.key` with certifica
 docker compose up -d --build
 ```
 
-Open **https://localhost:8888** in your browser.
+Open **https://localhost** in your browser.
 
 > The self-signed certificate will trigger a browser warning — accept it for local dev, use a real cert in production.
 
@@ -128,6 +149,7 @@ LDAP settings can also be managed from the Admin → LDAP tab in the UI.
 - Restrict access to port `443` via firewall or VPN
 - Store `.env` outside the repository and never commit it
 - Rotate secrets and backup encryption keys on a schedule
+- Database dumps in `./backups` contain encrypted secrets, but keep the directory protected anyway
 - Review backup files — they contain all vault entries encrypted with the backup password
 
 ## Project structure
@@ -136,19 +158,27 @@ LDAP settings can also be managed from the Admin → LDAP tab in the UI.
 suckpasswords/
 ├── docker-compose.yml
 ├── .env.example
+├── .github/workflows/ci.yml   # ruff, pip-audit, image build
 ├── nginx/nginx.conf
 ├── certs/generate-dev-cert.sh
+├── docks/images/              # README screenshots
 └── backend/
     ├── Dockerfile
     ├── requirements.txt
     └── app/
-        ├── main.py       # API routes
-        ├── models.py     # SQLAlchemy models
-        ├── schemas.py    # Pydantic schemas
-        ├── security.py   # JWT, bcrypt, Fernet helpers
-        ├── config.py     # Settings from .env
-        ├── database.py   # DB engine / session
-        └── ui.html       # Single-page web UI
+        ├── main.py        # app setup, router wiring, UI serving
+        ├── startup.py     # lifespan: migrations, admin bootstrap, legacy re-encryption
+        ├── deps.py        # auth / admin dependencies
+        ├── models.py      # SQLAlchemy models
+        ├── schemas.py     # Pydantic schemas
+        ├── security.py    # JWT, bcrypt, entry encryption
+        ├── config.py      # settings from .env
+        ├── database.py    # DB engine / session
+        ├── routers/       # auth, folders, entries, admin, ldap, smtp, backup
+        ├── services/      # access, audit, backup, folders, ldap, smtp
+        ├── migrations/    # Alembic (baseline 0001)
+        ├── ui.html        # single-page web UI shell
+        └── static/        # ui.css, ui.js
 ```
 
 ## API
@@ -162,7 +192,8 @@ Key endpoints:
 | POST | `/auth/login` | Obtain JWT token |
 | GET | `/users/me` | Current user info |
 | GET/POST | `/folders` | List / create folders |
-| GET/POST | `/entries` | List / create entries |
+| GET/POST | `/entries` | List / create entries (list does not include passwords) |
+| GET | `/entries/{id}/password` | Reveal a password (written to the audit log) |
 | PUT/DELETE | `/entries/{id}` | Update / delete entry |
 | GET | `/password/generate` | Generate a random password |
 | POST | `/admin/backup` | Create encrypted backup |
