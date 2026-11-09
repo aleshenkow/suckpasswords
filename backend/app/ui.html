@@ -41,7 +41,7 @@
 </div>
 
 <!-- ═══ APP ═══ -->
-<div class="app hidden" id="appShell">
+<div class="app hidden" id="appShell" data-layout="a">
 
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
@@ -91,7 +91,12 @@
     <div id="tabVault" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
       <div class="main-header">
         <h1 class="main-title" id="vaultTitle">Vault</h1>
+        <span class="count-chip" id="countChip"></span>
         <div class="header-actions">
+          <div class="layout-switch" id="layoutSwitch" role="group" aria-label="Layout">
+            <button type="button" data-layout="a" title="Table layout">&#9776; Table</button>
+            <button type="button" data-layout="b" title="Split layout (list + details)">&#9703; Split</button>
+          </div>
           <button class="topbar-control" id="aboutBtn" title="About">
             <span class="ico">ℹ️</span>
             <span class="lbl">About</span>
@@ -108,6 +113,7 @@
           <div class="stat-card"><div class="stat-val" id="statFiltered">-</div><div class="stat-lbl">Shown</div></div>
         </div>
 
+        <div class="vault-split">
         <div class="entries-section">
           <div class="entries-header">
             <div class="entries-title" id="entriesSectionTitle">
@@ -142,6 +148,8 @@
               </tbody>
             </table>
           </div>
+        </div>
+        <aside class="entry-detail" id="entryDetail"></aside>
         </div>
       </div>
     </div>
