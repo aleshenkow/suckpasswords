@@ -594,6 +594,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         db.commit()
 
     if payload.remember_me:
+        from .config import settings
         token = create_access_token(payload.username, settings.app_remember_me_expire_minutes)
     else:
         token = create_access_token(payload.username)
