@@ -2,8 +2,15 @@ const $ = id => document.getElementById(id);
 const state = {
   token: localStorage.getItem('sp_token') || '',
   user: null, folders: [], entries: [], roles: [], users: [],
-  selectedFolderId: null, selectedEntryId: null, draggingFolderId: null, editingEntryId: null,
+  selectedFolderId: null, selectedEntryId: null, typeFilter: '', draggingFolderId: null, editingEntryId: null,
 };
+
+// ── Line icons (inline SVG sprite in ui.html) ─────────────────────
+const ic = name => '<svg class="i"><use href="#i-'+name+'"/></svg>';
+const TYPE_ICON = {password:'key', ssh:'terminal-2', api:'api'};
+const typeIc = code => ic(TYPE_ICON[code]||'key');
+const typeTile = code => '<span class="tile t-'+esc(TYPE_ICON[code]?code:'password')+'">'+typeIc(code)+'</span>';
+function iconBtn(title,name,fn,cls='') { const b=document.createElement('button'); b.className='btn-icon'+cls; b.title=title; b.setAttribute('aria-label',title); b.innerHTML=ic(name); b.addEventListener('click',fn); return b; }
 
 // ── Icons ─────────────────────────────────────────────────────────
 const ICONS = [
@@ -110,6 +117,7 @@ const showRoot=v=>{
 function visibleEntries() {
   const q=$('searchInput').value.trim().toLowerCase();
   let list=state.selectedFolderId==null?state.entries:state.entries.filter(e=>e.folder_id===state.selectedFolderId);
+  if (state.typeFilter) list=list.filter(e=>e.entry_type_code===state.typeFilter);
   if (q) list=list.filter(e=>(e.title+' '+e.login+' '+e.url+' '+e.description).toLowerCase().includes(q));
   return list;
 }
@@ -234,9 +242,9 @@ function renderFolderTree() {
 
       const acts=document.createElement('div'); acts.className='f-actions';
       if (!f.is_system) {
-        const mk=(title,ic,cls,fn)=>{ const b=document.createElement('button'); b.className='btn-icon'+cls; b.title=title; b.textContent=ic; b.onclick=ev=>{ev.stopPropagation();fn();}; return b; };
+        const mk=(title,icn,cls,fn)=>{ const b=iconBtn(title,icn,ev=>{ev.stopPropagation();fn();},cls); return b; };
         acts.append(
-          mk('Rename','✏️','',()=>{
+          mk('Rename','pencil','',()=>{
             state.selectedFolderId=f.id;
             $('renameFolderName').value=f.name;
             selectRenameFolderIcon(f.icon||'📁');
@@ -244,8 +252,8 @@ function renderFolderTree() {
             setMsg('renameFolderMsg','');
             openModal('renameFolderModal');
           }),
-          mk('Move','📦','',()=>{ state.selectedFolderId=f.id; fillParentSel('moveFolderParent',f.id); setMsg('moveFolderMsg',''); openModal('moveFolderModal'); }),
-          mk('Delete','🗑️',' red',()=>{ state.selectedFolderId=f.id; $('deleteFolderTarget').textContent='Folder: '+f.name; $('deleteFolderStrategy').value='move_children_to_root'; setMsg('deleteFolderMsg',''); openModal('deleteFolderModal'); })
+          mk('Move','folder-symlink','',()=>{ state.selectedFolderId=f.id; fillParentSel('moveFolderParent',f.id); setMsg('moveFolderMsg',''); openModal('moveFolderModal'); }),
+          mk('Delete','trash',' red',()=>{ state.selectedFolderId=f.id; $('deleteFolderTarget').textContent='Folder: '+f.name; $('deleteFolderStrategy').value='move_children_to_root'; setMsg('deleteFolderMsg',''); openModal('deleteFolderModal'); })
         );
       }
       row.append(ico,nm,badge,acts);
@@ -276,14 +284,14 @@ function renderEntries() {
   } else {
     $('entriesSectionTitle').innerHTML='<span class="entries-title-icon">📂</span><span>Select a folder</span>';
     $('vaultTitle').textContent='Vault';
-    tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="big">📂</div>Select a folder in the sidebar</div></td></tr>';
+    tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="big">'+ic('folder')+'</div>Select a folder in the sidebar</div></td></tr>';
     state.selectedEntryId=null; renderDetail(); updateStats(); return;
   }
 
   const visible=visibleEntries();
   updateStats();
   if (!visible.length) {
-    tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="big">🗄️</div>No entries found</div></td></tr>';
+    tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="big">'+ic('search')+'</div>No entries found</div></td></tr>';
     state.selectedEntryId=null; renderDetail(); return;
   }
   const folderById=new Map(state.folders.map(f=>[f.id,f.name]));
@@ -296,7 +304,7 @@ function renderEntries() {
 
     tr.innerHTML=
       '<td><div class="td-icon-title">'
-      +'<span class="td-ico">'+esc(e.icon||'🔑')+'</span>'
+      +typeTile(e.entry_type_code)
       +'<div><div class="td-name">'+esc(e.title)+'</div>'
       +'<div class="td-sub">'+esc(e.entry_type_code)+'</div>'
       +'</div></div></td>'
@@ -326,15 +334,15 @@ function renderEntries() {
     const acts=$('tda_'+e.id);
     const lbts=$('lba_'+e.id);
     const pbts=$('pba_'+e.id);
-    const mkB=(title,ic,fn)=>{ const b=document.createElement('button'); b.className='btn-icon'; b.title=title; b.textContent=ic; b.addEventListener('click',fn); return b; };
-    if (e.login) lbts.append(mkB('Copy login','📋',()=>{ navigator.clipboard.writeText(e.login); showCopyToast('Login'); }));
+    const mkB=(title,icn,fn)=>iconBtn(title,icn,fn);
+    if (e.login) lbts.append(mkB('Copy login','copy',()=>{ navigator.clipboard.writeText(e.login); showCopyToast('Login'); }));
     pbts.append(
-      mkB('Copy password','🔐',async()=>{
+      mkB('Copy password','key',async()=>{
         try{ const d=await api('/entries/'+e.id+'/password'); await navigator.clipboard.writeText(d.password); showCopyToast('Password'); }
         catch(err){ alert(err.message); }
       })
     );
-    acts.append(mkB('Edit','✏️',()=>openEntryModal(e)));
+    acts.append(mkB('Edit','pencil',()=>openEntryModal(e)));
   }
   renderDetail();
 }
@@ -349,11 +357,11 @@ function renderDetail() {
   const box=$('entryDetail');
   if (state.layout!=='b') { box.innerHTML=''; return; }
   const e=state.entries.find(x=>x.id===state.selectedEntryId);
-  if (!e) { box.innerHTML='<div class="empty-state"><div class="big">🔑</div>Select an entry</div>'; return; }
+  if (!e) { box.innerHTML='<div class="empty-state"><div class="big">'+ic('key')+'</div>Select an entry</div>'; return; }
   const folder=(state.folders.find(f=>f.id===e.folder_id)||{}).name||'General';
   const row=(label,valHtml,btnsId)=>'<div class="dt-row"><div><div class="dt-lbl">'+label+'</div>'+valHtml+'</div><div class="td-actions" style="opacity:1" id="'+btnsId+'"></div></div>';
   box.innerHTML=
-    '<div class="dt-head"><span class="dt-ico">'+esc(e.icon||'🔑')+'</span>'
+    '<div class="dt-head"><span class="dt-ico">'+typeTile(e.entry_type_code)+'</span>'
     +'<div style="min-width:0"><div class="dt-title">'+esc(e.title)+'</div><div class="dt-meta">'+esc(folder)+' · '+esc(e.entry_type_code)+'</div></div>'
     +'<div class="td-actions" style="opacity:1;margin-left:auto" id="dtTop"></div></div>'
     +'<div class="dt-card">'
@@ -363,19 +371,19 @@ function renderDetail() {
     +'</div>'
     +(e.description?'<div class="dt-desc">'+esc(e.description)+'</div>':'')
     +'<div class="dt-note">Showing or copying a password is recorded in the audit log.</div>';
-  const mkB=(title,ic,fn)=>{ const b=document.createElement('button'); b.className='btn-icon'; b.title=title; b.textContent=ic; b.addEventListener('click',fn); return b; };
-  $('dtTop').append(mkB('Edit','✏️',()=>openEntryModal(e)));
-  if (e.login) $('dtLogin').append(mkB('Copy login','📋',()=>{ navigator.clipboard.writeText(e.login); showCopyToast('Login'); }));
+  const mkB=(title,icn,fn)=>iconBtn(title,icn,fn);
+  $('dtTop').append(mkB('Edit','pencil',()=>openEntryModal(e)));
+  if (e.login) $('dtLogin').append(mkB('Copy login','copy',()=>{ navigator.clipboard.writeText(e.login); showCopyToast('Login'); }));
   let shown=false, hideT=null;
   const mask='\u2022'.repeat(10);
-  const hide=()=>{ shown=false; clearTimeout(hideT); const n=$('dtPw'); if(n){ n.textContent=mask; n.classList.add('pw-mask'); } };
+  const hide=()=>{ shown=false; clearTimeout(hideT); const n=$('dtPw'); if(n){ n.textContent=mask; n.classList.add('pw-mask'); } const eb=$('dtEye'); if(eb) eb.innerHTML=ic('eye'); };
   $('dtPass').append(
-    mkB('Show / hide password','👁️',async()=>{
+    Object.assign(mkB('Show / hide password','eye',async()=>{
       if (shown) { hide(); return; }
-      try{ const d=await api('/entries/'+e.id+'/password'); const n=$('dtPw'); n.textContent=d.password; n.classList.remove('pw-mask'); shown=true; hideT=setTimeout(hide,15000); }
+      try{ const d=await api('/entries/'+e.id+'/password'); const n=$('dtPw'); n.textContent=d.password; n.classList.remove('pw-mask'); shown=true; $('dtEye').innerHTML=ic('eye-off'); hideT=setTimeout(hide,15000); }
       catch(err){ alert(err.message); }
-    }),
-    mkB('Copy password','🔐',async()=>{
+    }),{id:'dtEye'}),
+    mkB('Copy password','copy',async()=>{
       try{ const d=await api('/entries/'+e.id+'/password'); await navigator.clipboard.writeText(d.password); showCopyToast('Password'); }
       catch(err){ alert(err.message); }
     })
@@ -390,6 +398,11 @@ function applyLayout(l) {
   renderEntries();
 }
 document.querySelectorAll('#layoutSwitch button').forEach(b=>b.addEventListener('click',()=>applyLayout(b.dataset.layout)));
+document.querySelectorAll('#typeChips .chip').forEach(c=>c.addEventListener('click',()=>{
+  state.typeFilter=c.dataset.type;
+  document.querySelectorAll('#typeChips .chip').forEach(x=>x.classList.toggle('active',x===c));
+  renderEntries();
+}));
 document.addEventListener('keydown',ev=>{
   if ((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='k'&&!$('appShell').classList.contains('hidden')) { ev.preventDefault(); $('searchInput').focus(); $('searchInput').select(); }
 });
@@ -446,7 +459,7 @@ function isWeakPassword(pw) {
 let _copyTimer = null;
 function showCopyToast(label) {
   const t = $('copyToast');
-  t.textContent = '✅ ' + label + ' copied';
+  t.textContent = label + ' copied';
   t.classList.add('show');
   if (_copyTimer) clearTimeout(_copyTimer);
   _copyTimer = setTimeout(()=>t.classList.remove('show'), 2000);
@@ -981,7 +994,7 @@ bootstrapApp();
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   const icon = $('themeToggleBtn').querySelector('.ico');
-  if (icon) icon.textContent = theme === 'light' ? '🌙' : '☀️';
+  if (icon) icon.innerHTML = ic(theme === 'light' ? 'moon' : 'sun');
   localStorage.setItem('sp_theme_' + (state.user?.username || '_'), theme);
 }
 function initTheme() {
