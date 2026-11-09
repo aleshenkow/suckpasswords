@@ -2,7 +2,7 @@ const $ = id => document.getElementById(id);
 const state = {
   token: localStorage.getItem('sp_token') || '',
   user: null, folders: [], entries: [], roles: [], users: [],
-  selectedFolderId: null, draggingFolderId: null, editingEntryId: null,
+  selectedFolderId: null, selectedEntryId: null, draggingFolderId: null, editingEntryId: null,
 };
 
 // ── Icons ─────────────────────────────────────────────────────────
@@ -127,6 +127,8 @@ function updateStats() {
   countUp($('statFolders'),state.folders.length);
   countUp($('statEntries'),state.entries.length);
   countUp($('statFiltered'),visibleEntries().length);
+  const n=visibleEntries().length;
+  $('countChip').textContent=state.selectedFolderId==null?'':n+(n===1?' entry':' entries')+' · '+state.folders.length+' folders';
 }
 
 // ── Selects ───────────────────────────────────────────────────────
@@ -275,16 +277,17 @@ function renderEntries() {
     $('entriesSectionTitle').innerHTML='<span class="entries-title-icon">📂</span><span>Select a folder</span>';
     $('vaultTitle').textContent='Vault';
     tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="big">📂</div>Select a folder in the sidebar</div></td></tr>';
-    updateStats(); return;
+    state.selectedEntryId=null; renderDetail(); updateStats(); return;
   }
 
   const visible=visibleEntries();
   updateStats();
   if (!visible.length) {
     tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="big">🗄️</div>No entries found</div></td></tr>';
-    return;
+    state.selectedEntryId=null; renderDetail(); return;
   }
   const folderById=new Map(state.folders.map(f=>[f.id,f.name]));
+  if (!visible.some(e=>e.id===state.selectedEntryId)) state.selectedEntryId=state.layout==='b'?visible[0].id:null;
   for (const e of visible) {
     const tr=document.createElement('tr');
     const bCls=e.entry_type_code==='ssh'?'type-badge ssh':e.entry_type_code==='api'?'type-badge api':'type-badge';
@@ -295,6 +298,7 @@ function renderEntries() {
       '<td><div class="td-icon-title">'
       +'<span class="td-ico">'+esc(e.icon||'🔑')+'</span>'
       +'<div><div class="td-name">'+esc(e.title)+'</div>'
+      +'<div class="td-sub">'+esc(e.entry_type_code)+'</div>'
       +'</div></div></td>'
       +'<td><span class="'+bCls+'">'+esc(e.entry_type_code)+'</span></td>'
       +'<td class="td-login"><div class="td-field-row">'+(e.login?'<span>'+esc(e.login)+'</span>':'<span class="dash">—</span>')+'<div class="td-actions" id="lba_'+e.id+'"></div></div></td>'
@@ -310,6 +314,12 @@ function renderEntries() {
     });
     tr.addEventListener('dragend',()=>{ tr.style.opacity=''; clearDropHL(); });
     tr.addEventListener('dblclick', ev=>{ if (!ev.target.closest('button,a')) openEntryModal(e); });
+    tr.dataset.id=e.id;
+    if (e.id===state.selectedEntryId) tr.classList.add('sel');
+    tr.addEventListener('click', ev=>{
+      if (ev.target.closest('button,a')) return;
+      selectEntry(e.id);
+    });
     tbody.appendChild(tr);
 
     // Wire action buttons after DOM insert
@@ -326,7 +336,64 @@ function renderEntries() {
     );
     acts.append(mkB('Edit','✏️',()=>openEntryModal(e)));
   }
+  renderDetail();
 }
+
+// ── Layout switch (A: table, B: list + details) ───────────────────
+function selectEntry(id) {
+  state.selectedEntryId=id;
+  document.querySelectorAll('#entriesTbody tr').forEach(r=>r.classList.toggle('sel',+r.dataset.id===id));
+  renderDetail();
+}
+function renderDetail() {
+  const box=$('entryDetail');
+  if (state.layout!=='b') { box.innerHTML=''; return; }
+  const e=state.entries.find(x=>x.id===state.selectedEntryId);
+  if (!e) { box.innerHTML='<div class="empty-state"><div class="big">🔑</div>Select an entry</div>'; return; }
+  const folder=(state.folders.find(f=>f.id===e.folder_id)||{}).name||'General';
+  const row=(label,valHtml,btnsId)=>'<div class="dt-row"><div><div class="dt-lbl">'+label+'</div>'+valHtml+'</div><div class="td-actions" style="opacity:1" id="'+btnsId+'"></div></div>';
+  box.innerHTML=
+    '<div class="dt-head"><span class="dt-ico">'+esc(e.icon||'🔑')+'</span>'
+    +'<div style="min-width:0"><div class="dt-title">'+esc(e.title)+'</div><div class="dt-meta">'+esc(folder)+' · '+esc(e.entry_type_code)+'</div></div>'
+    +'<div class="td-actions" style="opacity:1;margin-left:auto" id="dtTop"></div></div>'
+    +'<div class="dt-card">'
+    +row('Login',e.login?'<span>'+esc(e.login)+'</span>':'<span class="dash">—</span>','dtLogin')
+    +row('Password','<span class="pw-mask" id="dtPw">&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;</span>','dtPass')
+    +(e.url?row('URL',isSafeUrl(e.url)?'<a href="'+esc(e.url)+'" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none">'+esc(e.url)+'</a>':'<span>'+esc(e.url)+'</span>','dtUrl'):'')
+    +'</div>'
+    +(e.description?'<div class="dt-desc">'+esc(e.description)+'</div>':'')
+    +'<div class="dt-note">Showing or copying a password is recorded in the audit log.</div>';
+  const mkB=(title,ic,fn)=>{ const b=document.createElement('button'); b.className='btn-icon'; b.title=title; b.textContent=ic; b.addEventListener('click',fn); return b; };
+  $('dtTop').append(mkB('Edit','✏️',()=>openEntryModal(e)));
+  if (e.login) $('dtLogin').append(mkB('Copy login','📋',()=>{ navigator.clipboard.writeText(e.login); showCopyToast('Login'); }));
+  let shown=false, hideT=null;
+  const mask='\u2022'.repeat(10);
+  const hide=()=>{ shown=false; clearTimeout(hideT); const n=$('dtPw'); if(n){ n.textContent=mask; n.classList.add('pw-mask'); } };
+  $('dtPass').append(
+    mkB('Show / hide password','👁️',async()=>{
+      if (shown) { hide(); return; }
+      try{ const d=await api('/entries/'+e.id+'/password'); const n=$('dtPw'); n.textContent=d.password; n.classList.remove('pw-mask'); shown=true; hideT=setTimeout(hide,15000); }
+      catch(err){ alert(err.message); }
+    }),
+    mkB('Copy password','🔐',async()=>{
+      try{ const d=await api('/entries/'+e.id+'/password'); await navigator.clipboard.writeText(d.password); showCopyToast('Password'); }
+      catch(err){ alert(err.message); }
+    })
+  );
+}
+function applyLayout(l) {
+  state.layout=l==='b'?'b':'a';
+  $('appShell').dataset.layout=state.layout;
+  document.querySelectorAll('#layoutSwitch button').forEach(b=>b.classList.toggle('active',b.dataset.layout===state.layout));
+  try{ localStorage.setItem('sp_layout',state.layout); }catch{}
+  if (state.layout==='b' && state.selectedEntryId==null) { const v=state.selectedFolderId!=null?visibleEntries():[]; if (v.length) state.selectedEntryId=v[0].id; }
+  renderEntries();
+}
+document.querySelectorAll('#layoutSwitch button').forEach(b=>b.addEventListener('click',()=>applyLayout(b.dataset.layout)));
+document.addEventListener('keydown',ev=>{
+  if ((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='k'&&!$('appShell').classList.contains('hidden')) { ev.preventDefault(); $('searchInput').focus(); $('searchInput').select(); }
+});
+{ let l='a'; try{ l=localStorage.getItem('sp_layout')||'a'; }catch{} state.layout=l==='b'?'b':'a'; $('appShell').dataset.layout=state.layout; document.querySelectorAll('#layoutSwitch button').forEach(b=>b.classList.toggle('active',b.dataset.layout===state.layout)); }
 
 // ── Entry modal ───────────────────────────────────────────────────
 function openEntryModal(entry=null) {
