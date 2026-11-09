@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import assert_admin, get_current_user
+from ..deps import require_admin
 from ..models import AuditLog, EntryType, Role, RoleEntryTypePermission, User, UserRole
 from ..schemas import (
     AuditLogResponse,
@@ -22,9 +22,8 @@ router = APIRouter()
 
 @router.post("/admin/roles")
 def create_role(
-    payload: RoleCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    payload: RoleCreate, db: Session = Depends(get_db), user: User = Depends(require_admin)
 ) -> dict[str, str]:
-    assert_admin(user)
     existing = db.scalar(select(Role).where(Role.name == payload.name))
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Role already exists")
@@ -36,15 +35,13 @@ def create_role(
 
 
 @router.get("/admin/roles", response_model=list[RoleResponse])
-def list_roles(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[RoleResponse]:
-    assert_admin(user)
+def list_roles(db: Session = Depends(get_db), user: User = Depends(require_admin)) -> list[RoleResponse]:
     roles = db.scalars(select(Role).order_by(Role.name)).all()
     return [RoleResponse(id=r.id, name=r.name, description=r.description) for r in roles]
 
 
 @router.get("/admin/users", response_model=list[UserResponse])
-def list_users(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[UserResponse]:
-    assert_admin(user)
+def list_users(db: Session = Depends(get_db), user: User = Depends(require_admin)) -> list[UserResponse]:
     users = db.scalars(select(User).order_by(User.username)).all()
     roles_by_user: dict[int, list[str]] = {}
     for user_id, role_name in db.execute(
@@ -66,8 +63,7 @@ def list_users(db: Session = Depends(get_db), user: User = Depends(get_current_u
 
 
 @router.get("/admin/entry-types", response_model=list[EntryTypeResponse])
-def list_entry_types(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[EntryTypeResponse]:
-    assert_admin(user)
+def list_entry_types(db: Session = Depends(get_db), user: User = Depends(require_admin)) -> list[EntryTypeResponse]:
     types = db.scalars(select(EntryType).order_by(EntryType.code)).all()
     return [EntryTypeResponse(code=t.code, title=t.title) for t in types]
 
@@ -76,10 +72,8 @@ def list_entry_types(db: Session = Depends(get_db), user: User = Depends(get_cur
 def upsert_permission(
     payload: PermissionUpsert,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> dict[str, str]:
-    assert_admin(user)
-
     role = db.scalar(select(Role).where(Role.name == payload.role_name))
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
@@ -121,10 +115,8 @@ def upsert_permission(
 
 @router.post("/admin/roles/assign")
 def assign_role(
-    payload: RoleAssign, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    payload: RoleAssign, db: Session = Depends(get_db), user: User = Depends(require_admin)
 ) -> dict[str, str]:
-    assert_admin(user)
-
     target_user = db.scalar(select(User).where(User.username == payload.username))
     if target_user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -151,10 +143,8 @@ def assign_role(
 
 @router.post("/admin/roles/unassign")
 def unassign_role(
-    payload: RoleUnassign, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    payload: RoleUnassign, db: Session = Depends(get_db), user: User = Depends(require_admin)
 ) -> dict[str, str]:
-    assert_admin(user)
-
     target_user = db.scalar(select(User).where(User.username == payload.username))
     if target_user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -183,9 +173,8 @@ def unassign_role(
 def toggle_admin(
     user_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> dict[str, object]:
-    assert_admin(user)
     target = db.scalar(select(User).where(User.id == user_id))
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -210,10 +199,10 @@ def toggle_admin(
 @router.get("/admin/logs", response_model=list[AuditLogResponse])
 def list_audit_logs(
     limit: int = 200,
+    offset: int = 0,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> list[AuditLogResponse]:
-    assert_admin(user)
     limit = max(1, min(int(limit or 200), 1000))
     rows = db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit)).all()
     return [

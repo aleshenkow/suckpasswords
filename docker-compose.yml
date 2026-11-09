@@ -27,6 +27,41 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    networks:
+      - internal
+
+  # Daily pg_dump (custom format) kept in ./backups, 14 days retention.
+  # Dumps contain encrypted secrets, but protect the directory anyway.
+  db-backup:
+    image: postgres:16-alpine
+    container_name: suckpasswords-db-backup
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGDATABASE: ${POSTGRES_DB}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          pg_dump -Fc -f /backups/sp_$$(date +%Y%m%d_%H%M%S).dump \
+            && find /backups -name 'sp_*.dump' -mtime +14 -delete
+          sleep 86400
+        done
     networks:
       - internal
 
@@ -35,7 +70,8 @@ services:
     container_name: suckpasswords-nginx
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "443:443"
     volumes:

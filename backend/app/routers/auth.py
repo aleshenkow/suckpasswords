@@ -13,8 +13,14 @@ from ..schemas import (
     TokenResponse,
     UserResponse,
 )
-from ..security import create_access_token, get_password_hash, verify_password
+from ..security import (
+    burn_password_check,
+    create_access_token,
+    get_password_hash,
+    verify_password,
+)
 from ..services.access import user_access_levels
+from ..services.audit import log_action
 from ..services.ldap import authenticate_with_ad, do_ldap_auth, get_ldap_row
 
 router = APIRouter()
@@ -24,6 +30,8 @@ router = APIRouter()
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.scalar(select(User).where(User.username == payload.username))
     ldap_cfg = get_ldap_row(db)
+    if user is None:
+        burn_password_check(payload.password)  # keep timing similar for unknown users
 
     # ── Lockout check ───────────────────────────────────────────────
     if user and user.locked_until and user.locked_until > datetime.now(timezone.utc):
@@ -80,7 +88,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
             user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
             if user.failed_login_attempts >= 5:
                 user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
-            db.commit()
+        log_action(db, payload.username[:128], "auth.failed", "user", "", "invalid credentials")
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if user is None or not user.is_active:
@@ -91,6 +100,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         user.failed_login_attempts = 0
         user.locked_until = None
         db.commit()
+
+    log_action(db, user.username, "auth.login", "user", user.id, f"remember_me={payload.remember_me}")
+    db.commit()
 
     if payload.remember_me:
         token = create_access_token(payload.username, settings.app_remember_me_expire_minutes)

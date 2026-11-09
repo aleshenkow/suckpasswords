@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Lint
+        run: |
+          pip install ruff
+          ruff check backend/app --select F,E9
+      - name: Dependency audit
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt
+      - name: Build image
+        run: docker build backend

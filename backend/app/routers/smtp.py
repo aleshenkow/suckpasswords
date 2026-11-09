@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import assert_admin, get_current_user
+from ..deps import require_admin
 from ..models import SmtpConfig, User
 from ..schemas import (
     SmtpConfigResponse,
@@ -40,8 +40,7 @@ def _smtp_row_to_response(cfg: SmtpConfig) -> SmtpConfigResponse:
 
 
 @router.get("/admin/smtp", response_model=SmtpConfigResponse)
-def get_smtp_config(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> SmtpConfigResponse:
-    assert_admin(user)
+def get_smtp_config(db: Session = Depends(get_db), user: User = Depends(require_admin)) -> SmtpConfigResponse:
     cfg = get_smtp_row(db)
     if cfg is None:
         cfg = SmtpConfig(id=1)
@@ -54,9 +53,8 @@ def get_smtp_config(db: Session = Depends(get_db), user: User = Depends(get_curr
 def save_smtp_config(
     payload: SmtpConfigSave,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> SmtpConfigResponse:
-    assert_admin(user)
     cfg = get_smtp_row(db)
     if cfg is None:
         cfg = SmtpConfig(id=1)
@@ -93,9 +91,8 @@ def save_smtp_config(
 def test_smtp(
     payload: SmtpTestRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> dict[str, str]:
-    assert_admin(user)
     cfg = get_smtp_row(db)
     if cfg is None or not cfg.host:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SMTP is not configured")

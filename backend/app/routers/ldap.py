@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import assert_admin, get_current_user
+from ..deps import require_admin
 from ..models import LdapConfig, Role, User, UserRole
 from ..schemas import (
     LdapConfigResponse,
@@ -40,8 +40,7 @@ def _ldap_row_to_response(cfg: LdapConfig) -> LdapConfigResponse:
 
 
 @router.get("/admin/ldap", response_model=LdapConfigResponse)
-def get_ldap_config(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> LdapConfigResponse:
-    assert_admin(user)
+def get_ldap_config(db: Session = Depends(get_db), user: User = Depends(require_admin)) -> LdapConfigResponse:
     cfg = get_ldap_row(db)
     if cfg is None:
         cfg = LdapConfig(id=1)
@@ -54,9 +53,8 @@ def get_ldap_config(db: Session = Depends(get_db), user: User = Depends(get_curr
 def save_ldap_config(
     payload: LdapConfigSave,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> LdapConfigResponse:
-    assert_admin(user)
     cfg = get_ldap_row(db)
     if cfg is None:
         cfg = LdapConfig(id=1)
@@ -90,9 +88,8 @@ def save_ldap_config(
 @router.post("/admin/ldap/test")
 def test_ldap_connection(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> dict[str, str]:
-    assert_admin(user)
     cfg = get_ldap_row(db)
     if cfg is None or not cfg.server_url:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LDAP is not configured")
@@ -110,9 +107,8 @@ def test_ldap_connection(
 @router.post("/admin/ldap/sync")
 def sync_ldap_users(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> dict[str, object]:
-    assert_admin(user)
     cfg = get_ldap_row(db)
     if cfg is None or not cfg.enabled or not cfg.server_url:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LDAP is not enabled or configured")

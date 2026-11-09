@@ -1,37 +1,62 @@
 import logging
+from pathlib import Path
 
-from sqlalchemy import select, text
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .database import Base, engine
-from .models import EntryType, Folder, LdapConfig, Role, SmtpConfig, User
-from .security import encrypt_secret, get_password_hash
+from .database import engine
+from .models import Entry, EntryType, Folder, LdapConfig, Role, SmtpConfig, User
+from .security import (
+    decrypt_secret,
+    encrypt_secret,
+    get_password_hash,
+    is_legacy_ciphertext,
+)
+
+
+def run_migrations() -> None:
+    """Apply Alembic migrations (the baseline revision is idempotent, so existing databases are adopted as-is)."""
+    cfg = Config()
+    cfg.set_main_option("script_location", str(Path(__file__).with_name("migrations")))
+    command.upgrade(cfg, "head")
+
+
+def reencrypt_legacy_secrets(db: Session) -> None:
+    """Upgrade secrets stored with the legacy key derivation to the current (v2) format."""
+    upgraded = 0
+    targets = (
+        (Entry, "password"),
+        (LdapConfig, "bind_password"),
+        (SmtpConfig, "password"),
+    )
+    for model, attr in targets:
+        for row in db.scalars(select(model)).all():
+            value = getattr(row, attr) or ""
+            if not is_legacy_ciphertext(value):
+                continue
+            try:
+                setattr(row, attr, encrypt_secret(decrypt_secret(value)))
+                upgraded += 1
+            except Exception:  # noqa: BLE001
+                logging.exception("Could not re-encrypt %s.%s id=%s; leaving as is", model.__name__, attr, row.id)
+    if upgraded:
+        db.commit()
+        logging.info("Re-encrypted %d secret(s) to v2 format", upgraded)
 
 
 def run_startup() -> None:
-    if settings.app_secret_key == "change_me":
-        logging.warning(
-            "SECURITY WARNING: APP_SECRET_KEY is the default 'change_me'. "
-            "Set a strong random secret in your .env file before production use!"
+    if settings.app_secret_key in ("", "change_me"):
+        raise RuntimeError(
+            "APP_SECRET_KEY is empty or the default 'change_me'. Set a strong random secret in .env "
+            "(e.g. `openssl rand -hex 32`) before starting the application."
         )
+    if len(settings.app_secret_key) < 32:
+        logging.warning("APP_SECRET_KEY is shorter than 32 characters; use a longer random secret.")
 
-    Base.metadata.create_all(bind=engine)
-
-    # Live migrations for new columns on existing tables
-    with engine.connect() as conn:
-        conn.execute(text("ALTER TABLE folders ADD COLUMN IF NOT EXISTS is_system BOOLEAN DEFAULT FALSE NOT NULL"))
-        conn.execute(text("ALTER TABLE folders ADD COLUMN IF NOT EXISTS icon VARCHAR(32) DEFAULT '📁' NOT NULL"))
-        conn.execute(text("ALTER TABLE entries ADD COLUMN IF NOT EXISTS level VARCHAR(32) DEFAULT 'general' NOT NULL"))
-        conn.execute(text("ALTER TABLE entries ADD COLUMN IF NOT EXISTS created_by VARCHAR(128) DEFAULT '' NOT NULL"))
-        conn.execute(
-            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0 NOT NULL")
-        )
-        conn.execute(
-            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE DEFAULT NULL")
-        )
-        conn.execute(text("ALTER TABLE smtp_config ADD COLUMN IF NOT EXISTS anonymous BOOLEAN DEFAULT FALSE NOT NULL"))
-        conn.commit()
+    run_migrations()
 
     with Session(engine) as db:
         for code, title in (("password", "Password"), ("ssh", "SSH"), ("api", "API token")):
@@ -101,3 +126,5 @@ def run_startup() -> None:
             db.add(SmtpConfig(id=1))
 
         db.commit()
+
+        reencrypt_legacy_secrets(db)

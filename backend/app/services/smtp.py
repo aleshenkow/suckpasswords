@@ -1,6 +1,7 @@
 import logging
 import smtplib
 import threading
+import time
 from email.message import EmailMessage
 
 from sqlalchemy import select
@@ -104,14 +105,18 @@ def notify_async(cfg_data: dict, recipients: list[str], subject: str, body: str)
         return
 
     def _runner() -> None:
-        try:
-            logging.info(
-                "SMTP sending '%s' to %s via %s:%s", subject, recipients, cfg_data.get("host"), cfg_data.get("port")
-            )
-            smtp_send(cfg_data, recipients, subject, body)
-            logging.info("SMTP send OK -> %s", recipients)
-        except Exception as exc:  # noqa: BLE001
-            logging.warning("SMTP notification failed: %s", exc)
+        for attempt in range(1, 4):
+            try:
+                logging.info(
+                    "SMTP sending '%s' to %s via %s:%s", subject, recipients, cfg_data.get("host"), cfg_data.get("port")
+                )
+                smtp_send(cfg_data, recipients, subject, body)
+                logging.info("SMTP send OK -> %s", recipients)
+                return
+            except Exception as exc:  # noqa: BLE001
+                logging.warning("SMTP notification failed (attempt %d/3): %s", attempt, exc)
+                if attempt < 3:
+                    time.sleep(5 * attempt)
 
     threading.Thread(target=_runner, daemon=True).start()
 

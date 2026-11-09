@@ -96,7 +96,7 @@ def list_entries(db: Session = Depends(get_db), user: User = Depends(get_current
                 entry_type_code=code,
                 title=entry.title,
                 login=entry.login,
-                password=decrypt_secret(entry.password),
+                password="",  # revealed on demand via GET /entries/{id}/password (audited)
                 url=entry.url,
                 description=entry.description,
                 icon=entry.icon,
@@ -105,6 +105,22 @@ def list_entries(db: Session = Depends(get_db), user: User = Depends(get_current
             )
         )
     return response
+
+
+@router.get("/entries/{entry_id}/password")
+def reveal_entry_password(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    entry = db.scalar(select(Entry).where(Entry.id == entry_id))
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
+    if entry.level not in user_access_levels(db, user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No access to this entry")
+    log_action(db, user.username, "entry.reveal", "entry", entry.id, f"title={entry.title!r} level={entry.level}")
+    db.commit()
+    return {"password": decrypt_secret(entry.password)}
 
 
 @router.put("/entries/{entry_id}", response_model=EntryResponse)
@@ -140,7 +156,7 @@ def update_entry(
         entry.title = payload.title
     if payload.login is not None:
         entry.login = payload.login
-    plain_pw = decrypt_secret(entry.password)
+    plain_pw = ""
     if payload.password:
         entry.password = encrypt_secret(payload.password)
         plain_pw = payload.password

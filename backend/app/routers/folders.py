@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import assert_admin, get_current_user
+from ..deps import get_current_user, require_admin
 from ..models import Entry, Folder, User
 from ..schemas import (
     FolderCreate,
@@ -31,9 +31,8 @@ def _folder_response(folder: Folder) -> FolderResponse:
 
 @router.post("/folders", response_model=FolderResponse)
 def create_folder(
-    payload: FolderCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    payload: FolderCreate, db: Session = Depends(get_db), user: User = Depends(require_admin)
 ) -> FolderResponse:
-    assert_admin(user)
     assert_valid_parent(db, payload.parent_id)
 
     folder = Folder(name=payload.name.strip(), parent_id=payload.parent_id, icon=(payload.icon or "📁"))
@@ -61,10 +60,8 @@ def rename_folder(
     folder_id: int,
     payload: FolderRename,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> FolderResponse:
-    assert_admin(user)
-
     folder = db.scalar(select(Folder).where(Folder.id == folder_id))
     if not folder:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found")
@@ -93,10 +90,8 @@ def move_folder(
     folder_id: int,
     payload: FolderMove,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> FolderResponse:
-    assert_admin(user)
-
     folder = db.scalar(select(Folder).where(Folder.id == folder_id))
     if not folder:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found")
@@ -137,10 +132,8 @@ def delete_folder(
     folder_id: int,
     payload: FolderDelete | None = Body(default=None),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ) -> dict[str, str | int]:
-    assert_admin(user)
-
     folder = db.scalar(select(Folder).where(Folder.id == folder_id))
     if not folder:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found")
