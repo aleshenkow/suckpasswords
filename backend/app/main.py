@@ -33,3 +33,8 @@ def index() -> HTMLResponse:
     if not UI_FILE.exists():
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="UI file missing")
     return HTMLResponse(content=UI_FILE.read_text(encoding="utf-8"))
+
+
+@app.get("/health", include_in_schema=False)
+def health() -> dict[str, str]:
+    return {"status": "ok"}

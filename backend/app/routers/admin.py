@@ -46,23 +46,23 @@ def list_roles(db: Session = Depends(get_db), user: User = Depends(get_current_u
 def list_users(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[UserResponse]:
     assert_admin(user)
     users = db.scalars(select(User).order_by(User.username)).all()
-    result = []
-    for u in users:
-        user_roles = db.scalars(
-            select(Role).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == u.id).order_by(Role.name)
-        ).all()
-        result.append(
-            UserResponse(
-                id=u.id,
-                username=u.username,
-                email=u.email,
-                is_active=u.is_active,
-                is_superuser=u.is_superuser,
-                source=u.source,
-                roles=[r.name for r in user_roles],
-            )
+    roles_by_user: dict[int, list[str]] = {}
+    for user_id, role_name in db.execute(
+        select(UserRole.user_id, Role.name).join(Role, UserRole.role_id == Role.id).order_by(Role.name)
+    ):
+        roles_by_user.setdefault(user_id, []).append(role_name)
+    return [
+        UserResponse(
+            id=u.id,
+            username=u.username,
+            email=u.email,
+            is_active=u.is_active,
+            is_superuser=u.is_superuser,
+            source=u.source,
+            roles=roles_by_user.get(u.id, []),
         )
-    return result
+        for u in users
+    ]
 
 
 @router.get("/admin/entry-types", response_model=list[EntryTypeResponse])

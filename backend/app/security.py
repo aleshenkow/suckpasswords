@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 
 from cryptography.fernet import Fernet
-from jose import JWTError, jwt
+import jwt
 from passlib.context import CryptContext
 
 from .config import settings
@@ -45,7 +45,7 @@ def decode_access_token(token: str) -> str | None:
     try:
         payload = jwt.decode(token, settings.app_secret_key, algorithms=["HS256"])
         return payload.get("sub")
-    except JWTError:
+    except jwt.PyJWTError:
         return None
 
 

@@ -83,16 +83,17 @@ def list_entries(db: Session = Depends(get_db), user: User = Depends(get_current
     if not accessible_levels:
         return []
     entries = db.scalars(select(Entry).where(Entry.level.in_(accessible_levels)).order_by(Entry.title)).all()
+    type_codes = {t.id: t.code for t in db.scalars(select(EntryType)).all()}
     response: list[EntryResponse] = []
     for entry in entries:
-        entry_type = db.scalar(select(EntryType).where(EntryType.id == entry.entry_type_id))
-        if entry_type is None:
+        code = type_codes.get(entry.entry_type_id)
+        if code is None:
             continue
         response.append(
             EntryResponse(
                 id=entry.id,
                 folder_id=entry.folder_id,
-                entry_type_code=entry_type.code,
+                entry_type_code=code,
                 title=entry.title,
                 login=entry.login,
                 password=decrypt_secret(entry.password),

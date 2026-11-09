@@ -23,6 +23,12 @@ from ..services.folders import (
 router = APIRouter()
 
 
+def _folder_response(folder: Folder) -> FolderResponse:
+    return FolderResponse(
+        id=folder.id, name=folder.name, parent_id=folder.parent_id, icon=folder.icon, is_system=folder.is_system
+    )
+
+
 @router.post("/folders", response_model=FolderResponse)
 def create_folder(
     payload: FolderCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)
@@ -36,13 +42,7 @@ def create_folder(
     log_action(db, user.username, "folder.create", "folder", folder.id, f"name={folder.name!r}")
     db.commit()
     db.refresh(folder)
-    return FolderResponse(
-        id=folder.id,
-        name=folder.name,
-        parent_id=folder.parent_id,
-        icon=folder.icon,
-        is_system=folder.is_system,
-    )
+    return _folder_response(folder)
 
 
 @router.get("/folders", response_model=list[FolderResponse])
@@ -85,13 +85,7 @@ def rename_folder(
     )
     db.commit()
     db.refresh(folder)
-    return FolderResponse(
-        id=folder.id,
-        name=folder.name,
-        parent_id=folder.parent_id,
-        icon=folder.icon,
-        is_system=folder.is_system,
-    )
+    return _folder_response(folder)
 
 
 @router.patch("/folders/{folder_id}/move", response_model=FolderResponse)
@@ -135,13 +129,7 @@ def move_folder(
     )
     db.commit()
     db.refresh(folder)
-    return FolderResponse(
-        id=folder.id,
-        name=folder.name,
-        parent_id=folder.parent_id,
-        icon=folder.icon,
-        is_system=folder.is_system,
-    )
+    return _folder_response(folder)
 
 
 @router.delete("/folders/{folder_id}")
